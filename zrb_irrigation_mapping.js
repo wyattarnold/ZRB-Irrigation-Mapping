@@ -30,7 +30,7 @@ var CONFIG = {
   years: [2019, 2020, 2021, 2022, 2023, 2024],
 
   // External links
-  githubRepoUrl: 'https://github.com/YOUR_USERNAME/zrb-irrigation-mapping',
+  githubRepoUrl: 'https://github.com/wyattarnold/ZRB-Irrigation-Mapping.git',
 
   // Asset paths
   assets: {
@@ -249,22 +249,21 @@ ui.root.clear();
 
 // Create map panel
 var mapPanel = ui.Map();
-mapPanel.setCenter(CONFIG.center.lon, CONFIG.center.lat, CONFIG.center.zoom);
+mapPanel.centerObject(CONFIG.studyArea);
+mapPanel.setZoom(CONFIG.center.zoom + 1);
 mapPanel.setOptions('SATELLITE');
 mapPanel.setControlVisibility({layerList: true});
 
-// Info button (top-right) linking to GitHub repo
+// Info button linking to GitHub repo
 var infoButton = ui.Label('ℹ Info / GitHub', {
-  position: 'top-right',
-  margin: '8px',
-  padding: '6px 10px',
+  margin: '1px 0px 1px 6px',
+  padding: '5px 8px',
   backgroundColor: 'rgba(255,255,255,0.9)',
   border: '1px solid #999',
-  fontSize: '12px',
+  fontSize: '11px',
   fontWeight: 'bold',
   color: '#1a73e8'
 }, CONFIG.githubRepoUrl);
-mapPanel.add(infoButton);
 
 // ============================================================================
 // INITIALIZE ALL LAYERS
@@ -350,15 +349,16 @@ mapPanel.addLayer(bkirrMasked, bkirrViz, 'Budkyo Irrigated', false);
 var drawControlPanel = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal'),
   style: {
-    padding: '6px 10px',
+    padding: '4px 8px',
     backgroundColor: '#f7f7f7'
   }
 });
 
-var drawInfo = ui.Label('Draw once to update both Time Series and Area charts:', {
-  fontSize: '11px',
-  color: '#444',
-  margin: '6px 10px 6px 0px'
+var appTitle = ui.Label('Zambezi Irrigation Mapping', {
+  fontSize: '13px',
+  fontWeight: 'bold',
+  color: '#222',
+  margin: '4px 10px 4px 0px'
 });
 
 var drawRectButton = ui.Button({
@@ -373,7 +373,7 @@ var drawRectButton = ui.Button({
     mapPanel.drawingTools().setShape('rectangle');
     mapPanel.drawingTools().draw();
   },
-  style: {margin: '2px', fontSize: '10px'}
+  style: {margin: '1px', fontSize: '10px'}
 });
 
 var drawPolyButton = ui.Button({
@@ -388,12 +388,42 @@ var drawPolyButton = ui.Button({
     mapPanel.drawingTools().setShape('polygon');
     mapPanel.drawingTools().draw();
   },
-  style: {margin: '2px', fontSize: '10px'}
+  style: {margin: '1px', fontSize: '10px'}
 });
 
-drawControlPanel.add(drawInfo);
-drawControlPanel.add(drawRectButton);
-drawControlPanel.add(drawPolyButton);
+var leftControlPanel = ui.Panel({
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {
+    stretch: 'horizontal'
+  }
+});
+
+leftControlPanel.add(appTitle);
+var drawToolsCenterPanel = ui.Panel({
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {
+    stretch: 'horizontal'
+  }
+});
+
+drawToolsCenterPanel.add(ui.Label('', {stretch: 'horizontal'}));
+drawToolsCenterPanel.add(drawRectButton);
+drawToolsCenterPanel.add(drawPolyButton);
+drawToolsCenterPanel.add(ui.Label('', {stretch: 'horizontal'}));
+
+var rightControlPanel = ui.Panel({
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {
+    stretch: 'horizontal'
+  }
+});
+
+rightControlPanel.add(ui.Label('', {stretch: 'horizontal'}));
+rightControlPanel.add(infoButton);
+
+drawControlPanel.add(leftControlPanel);
+drawControlPanel.add(drawToolsCenterPanel);
+drawControlPanel.add(rightControlPanel);
 
 
 // ============================================================================
@@ -851,4 +881,4 @@ print('  - Shared Draw Controls: Use rectangle/polygon buttons above charts');
 print('  - Legend: View at bottom right');
 print('');
 print('Tip: Toggle layers on/off using the Layers panel');
-print('Info: Use the top-right "Info / GitHub" link to open the repository.');
+print('Info: Use the right-aligned "Info / GitHub" link in the draw controls bar.');
