@@ -19,7 +19,6 @@ from pathlib import Path
 import pandas as pd
 import folium
 from branca.element import MacroElement, Template
-from folium.plugins import FastMarkerCluster
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -72,6 +71,8 @@ CLUSTER_COLORS = [
 # Sample map controls from central config
 PERF_DEFAULTS = {
     'prefer_canvas': True,
+    'include_landcover_popups': False,
+    'include_cluster_popups': True,
     'show_landcover_layers': False,
     'show_all_year_layers': True,
     'show_year_specific_layers': False,
@@ -90,27 +91,21 @@ def _add_point_layer(
     color: str,
     radius: float,
     fill_opacity: float,
+    popup_builder=None,
 ) -> None:
-    """Add points to a feature group using FastMarkerCluster."""
-    points = (
-        layer_df[['lat', 'lon']]
-        .dropna()
-        .astype(float)
-        .values
-        .tolist()
-    )
-    callback = f"""
-    function (row) {{
-        return L.circleMarker(new L.LatLng(row[0], row[1]), {{
-            radius: {radius},
-            color: '#000000',
-            weight: 0.5,
-            fillColor: '{color}',
-            fillOpacity: {fill_opacity}
-        }});
-    }}
-    """
-    FastMarkerCluster(data=points, callback=callback).add_to(feature_group)
+    """Add points to a feature group using individual CircleMarker rendering."""
+    for row in layer_df.itertuples(index=False):
+        popup_text = popup_builder(row) if popup_builder is not None else None
+        folium.CircleMarker(
+            location=[float(row.lat), float(row.lon)],
+            radius=radius,
+            color='#000000',
+            fill=True,
+            fill_color=color,
+            fill_opacity=fill_opacity,
+            weight=0.5,
+            popup=popup_text,
+        ).add_to(feature_group)
 
 
 def _add_cluster_layers(
@@ -128,12 +123,37 @@ def _add_cluster_layers(
         layer_name = layer_name_fn(int(cid), cid_df)
 
         fg = folium.FeatureGroup(name=layer_name, show=show_layers)
+
+        popup_builder = None
+        if PERF['include_cluster_popups']:
+            cid_popup_df = (
+                cid_df.groupby(['lat', 'lon'], as_index=False)
+                .agg(
+                    years=('year', lambda s: sorted({int(v) for v in s if pd.notna(v)})),
+                    sample_count=('sample_num', 'nunique'),
+                )
+                .copy()
+            )
+
+            popup_builder = lambda row: (
+                f"Cluster: {int(cid)}<br>"
+                f"Years active: {', '.join(str(y) for y in row.years)}<br>"
+                f"N years: {len(row.years)}<br>"
+                f"Samples: {int(row.sample_count)}<br>"
+                f"Lon: {float(row.lon):.6f}<br>"
+                f"Lat: {float(row.lat):.6f}"
+            )
+            layer_points_df = cid_popup_df
+        else:
+            layer_points_df = cid_df
+
         _add_point_layer(
             feature_group=fg,
-            layer_df=cid_df,
+            layer_df=layer_points_df,
             color=color,
             radius=3,
             fill_opacity=fill_opacity,
+            popup_builder=popup_builder,
         )
         fg.add_to(map_obj)
 
@@ -215,12 +235,22 @@ for class_name in landcover_classes:
         show=PERF['show_landcover_layers'],
     )
 
+    popup_builder = None
+    if PERF['include_landcover_popups']:
+        popup_builder = lambda row, class_name=class_name: (
+            f"Landcover: {class_name}<br>"
+            f"Year: {int(row.year) if pd.notna(row.year) else 'NA'}<br>"
+            f"Lon: {float(row.lon):.6f}<br>"
+            f"Lat: {float(row.lat):.6f}"
+        )
+
     _add_point_layer(
         feature_group=fg,
         layer_df=class_df,
         color=color,
         radius=2,
         fill_opacity=0.85,
+        popup_builder=popup_builder,
     )
 
     fg.add_to(m)
@@ -331,6 +361,8 @@ if PERF['build_year_specific_layers']:
     print("  - Clustered samples by year and cluster from CSV")
 print("\nPerformance settings:")
 print(f"  - prefer_canvas: {PERF['prefer_canvas']}")
+print(f"  - include_landcover_popups: {PERF['include_landcover_popups']}")
+print(f"  - include_cluster_popups: {PERF['include_cluster_popups']}")
 print(f"  - build_all_year_layers: {PERF['build_all_year_layers']}")
 print(f"  - build_year_specific_layers: {PERF['build_year_specific_layers']}")
 print("  - Built-in legend for landcover classes and cluster IDs")

@@ -241,6 +241,10 @@ SAMPLE_MAP = {
     # Build-time controls (False skips creating those layers)
     'build_all_year_layers': True,
     'build_year_specific_layers': False,
+
+    # Popup controls
+    'include_landcover_popups': False,
+    'include_cluster_popups': True,
 }
 
 
