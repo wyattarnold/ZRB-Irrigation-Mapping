@@ -2,6 +2,18 @@
 
 This repository maps irrigated and rainfed agriculture in the Zambezi River Basin (Kafue Flats, Zambia) using Google Earth Engine.
 
+## Installation
+
+You must have a Google Earth Engine account to run the analysis (signup here: https://earthengine.google.com/signup/)
+
+Then, install environment from the repository root:
+
+```bash
+conda env create -f environment.yml
+conda activate gee
+earthengine authenticate
+```
+
 ## Irrigation Mapping Application
 
 Use the published Earth Engine app to view the mapping outputs:
