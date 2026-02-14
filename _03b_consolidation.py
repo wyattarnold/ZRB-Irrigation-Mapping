@@ -42,10 +42,6 @@ from src.classification_utils import wait_for_exports
 CONSOL_CONFIG = __config__.CONSOLIDATION
 EMB_CONFIG = __config__.EMBEDDINGS_CLASSIFICATION
 
-# Output directory
-OUTPUT_DIR = Path('output') / __config__.CURRENT_STUDY_AREA / CONSOL_CONFIG.get('output_subfolder', 'consolidation')
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
 # %%
 # Initialize Earth Engine
 print("Initializing Earth Engine...")
@@ -59,7 +55,6 @@ print("\n" + "="*70)
 print("MULTI-YEAR CONSOLIDATION")
 print("="*70)
 print(f"\nStudy area: {study_area_name}")
-print(f"Output directory: {OUTPUT_DIR}")
 
 # %% [markdown]
 ## 2. Load Configuration and Check Assets
@@ -640,5 +635,4 @@ if CONSOL_CONFIG.get('export_combined_classified', True):
         band_name = f'prob_{label.lower().replace(" ", "_").replace(".", "")}'
         print(f"  - {band_name}: {label} probability (0-100)")
 
-print(f"\nSummary saved to: {summary_path}")
 print("\n" + "="*70)

@@ -38,7 +38,7 @@ plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette('husl')
 
 # Output directory
-OUTPUT_DIR = Path('output') / __config__.CURRENT_STUDY_AREA / AREA_CONFIG.get('output_subfolder', 'consolidation')
+OUTPUT_DIR = Path('output') / __config__.CURRENT_STUDY_AREA / AREA_CONFIG.get('output_subfolder', 'embeddings_classification')
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

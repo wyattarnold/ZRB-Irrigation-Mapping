@@ -133,7 +133,6 @@ SCALE = 10  # Processing scale in meters (Sentinel-2 native resolution)
 
 # ============================================================================
 # ============================================================================
-#                        STEP 1: TRAINING DATA COLLECTION
 #          (_01a, _01b, _01c_*.py for landcover; _02a_*.py for crops)
 # ============================================================================
 # ============================================================================
@@ -455,7 +454,7 @@ AREA_STATISTICS = {
     'wait_for_exports': True,
 
     # Output
-    'output_subfolder': 'consolidation',
+    'output_subfolder': 'embeddings_classification',
 }
 
 
@@ -566,7 +565,6 @@ CONSOLIDATION = {
     'process_combined_only': False,  # If True, skip early/late consolidation and export only combined
     
     # --- Export ---
-    'output_subfolder': 'consolidation',
     'export_early_weighted': True,
     'export_late_weighted': True,
     'export_combined_classified': True,
