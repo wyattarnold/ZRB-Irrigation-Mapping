@@ -1,3 +1,16 @@
+# Environment and credentials
+*DS_Store
+src/.env
+*.env
+.env.local
+credentials/
+*.json
+*.code-workspace
+*docs/
+.claude/
+.github/
+output/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

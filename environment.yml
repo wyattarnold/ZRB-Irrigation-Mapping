@@ -1,0 +1,14 @@
+name: gee
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - folium
+  - earthengine-api
+  - dtaidistance
+  - scikit-learn
+  - scipy
