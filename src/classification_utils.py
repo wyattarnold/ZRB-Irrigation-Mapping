@@ -21,9 +21,6 @@ from src.gee_utils import _retry_with_backoff, asset_exists, delete_asset, ensur
 
 
 S2_COLLECTION = __config__.DATASETS.get("sentinel2", "COPERNICUS/S2_SR_HARMONIZED")
-EMBEDDINGS_COLLECTION = __config__.DATASETS.get(
-    "embeddings", "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
-)
 
 
 def normalize_confusion_matrix(confusion_array, n_clusters, class_mapping=None):
@@ -274,7 +271,7 @@ def load_unified_training_data(config_dict: dict) -> Tuple[pd.DataFrame, dict]:
     Load and merge training data from crop clusters and landcover samples.
     
     Combines:
-    - Crop clusters (from clustering.py): classes 0-8 (or as configured)
+    - Crop clusters (from _02b_clustering.py): classes 0-8 (or as configured)
     - Landcover samples (from sample_landcover.py): classes 10-15 (configurable)
     
     Parameters

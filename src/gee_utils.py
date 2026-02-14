@@ -393,7 +393,7 @@ def load_hccp_crop_mask(region=None, threshold=60, verbose=True):
     """
     hccp_path = getattr(__config__, 'HCCP_ASSET', None)
     if not hccp_path:
-        raise ValueError("HCCP_ASSET not defined in config.py")
+        raise ValueError("HCCP_ASSET not defined in __config__.py")
     
     # Load HCCP and create mask where b1 >= threshold is crop
     hccp = ee.Image(hccp_path)
@@ -427,7 +427,7 @@ def load_budyko_rainfed_crop_mask(region=None, verbose=True):
     """
     budyko_path = getattr(__config__, 'BUDYKO_RAINFED_ASSET', None)
     if not budyko_path:
-        raise ValueError("BUDYKO_RAINFED_ASSET not defined in config.py")
+        raise ValueError("BUDYKO_RAINFED_ASSET not defined in __config__.py")
     
     # Load Budyko and create mask where b1 == 1 is rainfed crop
     budyko = ee.Image(budyko_path)

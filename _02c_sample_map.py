@@ -31,7 +31,7 @@ import __config__
 print("Initializing self-contained map build...")
 
 study_area_key = __config__.CURRENT_STUDY_AREA
-study_cfg = __config__.STUDY_AREAS[study_area_key]
+study_cfg = __config__.get_study_area(study_area_key)
 study_name = study_cfg['name']
 center = study_cfg['center']
 zoom = study_cfg['zoom']

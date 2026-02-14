@@ -26,7 +26,7 @@ print(f"Study area: {study_area_config['name']}")
 output_dir = Path('output') / __config__.CURRENT_STUDY_AREA / 'training'
 output_dir.mkdir(parents=True, exist_ok=True)
 
-# %% Configuration from config.py
+# %% Configuration from __config__.py
 TARGET_CLASSES = __config__.LANDCOVER['target_classes']
 CLASS_NAMES = __config__.LANDCOVER['class_names']
 SAMPLES_PER_CLASS_PER_YEAR = __config__.LANDCOVER['samples_per_class_per_year']

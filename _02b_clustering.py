@@ -4,7 +4,7 @@ Hierarchical Clustering for Irrigation Timeseries
 Clusters irrigation patterns using Dynamic Time Warping (DTW) distance on the
 composite spectral index with hierarchical (agglomerative) clustering.
 
-Run: python clustering.py
+Run: python _02b_clustering.py
 """
 
 import sys

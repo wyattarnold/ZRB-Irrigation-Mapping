@@ -90,7 +90,7 @@ Cleans and validates landcover samples:
 - **Output**: `landcover_samples_cleaned.csv`
 - **Removed samples**: Saved to separate CSVs for review
 
-### Step 2a: Collect Crop Samples (`_02a_collect_crop_samples.py`)
+### Step 1d: Collect Crop Samples (`_01d_collect_crop_samples.py`)
 
 Samples crop pixels and extracts multi-year Sentinel-2 time series.
 
@@ -106,7 +106,7 @@ Samples crop pixels and extracts multi-year Sentinel-2 time series.
 
 Clusters crop samples by irrigation pattern using Dynamic Time Warping (DTW).
 
-- **Input**: Time series from Step 2a
+- **Input**: Time series from Step 1d (`_01d_collect_crop_samples.py`)
 - **Algorithm**: Hierarchical clustering with DTW distance on composite index
 - **Output**:
   - `output/{study_area}/training/clustering/clustering_results.csv`

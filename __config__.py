@@ -6,19 +6,19 @@ This file is organized by workflow stage:
 1. GLOBAL SETTINGS - Used by all scripts (project ID, study area, dates, seasons)
 
 2. STEP 1: TRAINING DATA COLLECTION
-   - _01a_export_landcover.py: Export yearly Dynamic World classifications
-   - _01b_sample_landcover.py: Sample non-crop landcover points
-   - _01c_clean_landcover_samples.py: Clean and validate landcover samples
-   - _02a_collect_crop_samples.py: Sample crop pixels, extract S2 time series
+    - _01a_export_landcover.py
+    - _01b_sample_landcover.py
+    - _01c_clean_landcover_samples.py
+    - _01d_collect_crop_samples.py
 
 3. STEP 2: CLUSTERING
-   - _02b_clustering.py: DTW-based hierarchical clustering of crop patterns
+    - _02b_clustering.py
+    - _02c_sample_map.py
 
-4. STEP 3: CLASSIFICATION
-   - _03_classification.py: Train classifier on embeddings, apply to study area
-
-5. STEP 4: AREA STATISTICS
-   - _04_area_statistics.py: Calculate and visualize area statistics from classified assets
+4. STEP 3: CLASSIFICATION + CONSOLIDATION + STATS
+    - _03a_classification.py
+    - _03b_consolidation.py
+    - _03c_area_statistics.py
 
 Each section indicates which script(s) use those settings.
 """
@@ -101,7 +101,7 @@ STUDY_AREAS = {
 
 # ----------------------------------------------------------------------------
 # Temporal Parameters
-# Used by: _02a_collect_crop_samples.py, _02b_clustering.py (date filtering, seasonal analysis)
+# Used by: _01d_collect_crop_samples.py, _02b_clustering.py (date filtering, seasonal analysis)
 # ----------------------------------------------------------------------------
 START_DATE = '2019-01-01'  # Analysis start (S2 data availability)
 END_DATE = '2024-12-31'    # Analysis end
@@ -117,23 +117,16 @@ WET_SEASON_MONTHS = [11, 12, 1, 2, 3] # Nov-March (crosses year boundary)
 # ----------------------------------------------------------------------------
 DATASETS = {
     'sentinel2': 'COPERNICUS/S2_SR_HARMONIZED',
-    'cloud_score_plus': 'GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED',
-    'embeddings': 'GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL',
     'chirps': 'UCSB-CHG/CHIRPS/DAILY',
-    'dynamic_world': 'GOOGLE/DYNAMICWORLD/V1',
 }
 
-# ----------------------------------------------------------------------------
-# Processing Parameters
-# Used by: _02a_collect_crop_samples.py (cloud masking), _03_classification.py (scale)
-# ----------------------------------------------------------------------------
-CLOUD_SCORE_THRESHOLD = 0.60  # Clear-sky threshold for Cloud Score+ (cs band)
-SCALE = 10  # Processing scale in meters (Sentinel-2 native resolution)
+# Cloud masking threshold used in sample extraction
+CLOUD_SCORE_THRESHOLD = 0.60
 
 
 # ============================================================================
 # ============================================================================
-#          (_01a, _01b, _01c_*.py for landcover; _02a_*.py for crops)
+#          (_01a, _01b, _01c_*.py for landcover; _01d_*.py for crops)
 # ============================================================================
 # ============================================================================
 # Workflow:
@@ -148,7 +141,7 @@ END_SAMPLE_ID = 4000    # Last sample number (inclusive)
 
 # ----------------------------------------------------------------------------
 # Training Crop Mask - WHERE TO SAMPLE CROP POINTS
-# Used by: _02a_collect_crop_samples.py (controls which pixels are sampled)
+# Used by: _01d_collect_crop_samples.py (controls which pixels are sampled)
 # ----------------------------------------------------------------------------
 TRAINING_CROP_MASK = {
     # Only option: 'annual_dw_landcover'
@@ -162,7 +155,7 @@ TRAINING_CROP_MASK = {
 
 # ----------------------------------------------------------------------------
 # Training Asset Export Settings
-# Used by: _02a_collect_crop_samples.py (asset export destination)
+# Used by: _01d_collect_crop_samples.py (asset export destination)
 # ----------------------------------------------------------------------------
 TRAINING_ASSET_SUBFOLDER = 'training'  # Asset path: projects/<id>/assets/<study_area>/<subfolder>
 
@@ -235,7 +228,7 @@ CLUSTERING = {
 # ============================================================================
 # ============================================================================
 #                        STEP 3: CLASSIFICATION
-#                        (_03_classification.py)
+#                        (_03a_classification.py)
 # ============================================================================
 # ============================================================================
 # Workflow: Load cluster labels + landcover samples → Train classifier on
@@ -243,7 +236,7 @@ CLUSTERING = {
 
 # ----------------------------------------------------------------------------
 # Embeddings Classification Settings
-# Used by: _03_classification.py, src/classification_utils.py
+# Used by: _03a_classification.py, src/classification_utils.py
 # ----------------------------------------------------------------------------
 # Based on AlphaEarth Foundations (Brown et al. 2025)
 # - 256 embedding dimensions per pixel, annual composites at 10m resolution
@@ -256,12 +249,12 @@ EMBEDDINGS_CLASSIFICATION = {
     # --- Data Sources ---
     'embeddings_dataset': 'GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL',
     
-    # Crop samples (from _02a + _02b)
-    'clustering_results_path': 'output/kafue_flats/training/clustering/clustering_results.csv',
-    'sampled_points_path': 'output/kafue_flats/training/sampled_points_data.csv',
+    # Crop samples (from _01d + _02b)
+    'clustering_results_path': f'output/{CURRENT_STUDY_AREA}/training/clustering/clustering_results.csv',
+    'sampled_points_path': f'output/{CURRENT_STUDY_AREA}/training/sampled_points_data.csv',
 
     # Landcover samples (from _01b + _01c) - non-crop classes
-    'landcover_samples_path': 'output/kafue_flats/training/landcover_samples_cleaned.csv',
+    'landcover_samples_path': f'output/{CURRENT_STUDY_AREA}/training/landcover_samples_cleaned.csv',
     'use_landcover_samples': True,  # Set False to use only crop clusters
     
     # --- Classification Years ---
@@ -278,7 +271,6 @@ EMBEDDINGS_CLASSIFICATION = {
     'rf_seed': 42,
     'rf_min_leaf_population': 20,  # Lower for fewer samples per class
     'rf_bag_fraction': 0.8,
-    'rf_variables_per_split': None,  # Auto = sqrt(256) ≈ 16
     
     # Gradient Tree Boost parameters (alternative)
     'gtb_num_trees': 350,
@@ -414,7 +406,7 @@ EMBEDDINGS_CLASSIFICATION = {
 # Workflow: Load yearly + consolidated assets → Calculate per-class areas → Generate charts
 
 AREA_STATISTICS = {
-    # Consolidated assets to load (from Step 3c exports)
+    # Consolidated assets to load (from Step 3b exports)
     'asset_folder': f"{CURRENT_STUDY_AREA}/classification",
     'consolidated_assets': {
         'early': {
@@ -573,8 +565,6 @@ CONSOLIDATION = {
     'combined_asset_name': 'consolidated_all_years_classified',
     'overwrite_assets': True,
     
-    # Also export confidence bands?
-    'export_confidence': True,
 }
 
 

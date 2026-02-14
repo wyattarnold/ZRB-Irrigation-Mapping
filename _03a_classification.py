@@ -19,7 +19,7 @@
 #
 # **Data:**
 # - Google Satellite Embedding V1 (GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL)
-# - DTW clustering results from clustering.py
+# - DTW clustering results from _02b_clustering.py
 # - Sampled points with coordinates
 #
 # **Author:** GEE Application
@@ -732,5 +732,5 @@ print("  - accuracy/test_accuracy_per_class_merged.csv")
 print("  - accuracy/accuracy_summary_merged.csv")
 print("  - accuracy/test_accuracy_by_type.csv")
 print("  - accuracy/test_confusion_matrix_by_type.csv")
-print("\nNext step: Run _04_area_statistics.py to calculate area statistics")
+print("\nNext step: Run _03c_area_statistics.py to calculate area statistics")
 print("\n" + "="*70)

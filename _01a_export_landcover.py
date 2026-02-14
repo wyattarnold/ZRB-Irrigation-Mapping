@@ -20,7 +20,7 @@ study_area_config = __config__.get_study_area()
 study_area = study_area_config['geometry']
 print(f"Study area: {study_area_config['name']}")
 
-# %% Configuration from config.py
+# %% Configuration from __config__.py
 YEARS = __config__.LANDCOVER['years']
 ASSET_FOLDER = __config__.LANDCOVER['asset_folder']
 ASSET_PREFIX = __config__.LANDCOVER['asset_prefix']
