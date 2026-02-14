@@ -259,7 +259,7 @@ EMBEDDINGS_CLASSIFICATION = {
     
     # --- Classification Years ---
     # Year = calendar year containing the dry season (e.g., 2020 = Nov 2019 - Oct 2020)
-    'classification_years': [2023],  # Limited for testing; expand to [2020, 2021, 2022, 2023]
+    'classification_years': [2019, 2020, 2021, 2022, 2023, 2024],
     
     # --- Classifier Selection ---
     # Options: 'random_forest', 'gradient_boost'
@@ -411,17 +411,17 @@ AREA_STATISTICS = {
     'consolidated_assets': {
         'early': {
             'asset_name': 'consolidated_2024_weighted',
-            'label': '2024-weighted',
+            'label': 'Early (2019)',
             'enabled': True,
         },
         'late': {
             'asset_name': 'consolidated_2019_weighted',
-            'label': '2019-weighted',
+            'label': 'Late (2024)',
             'enabled': True,
         },
         'combined': {
             'asset_name': 'consolidated_all_years_classified',
-            'label': 'All-years combined',
+            'label': 'All-Years',
             'enabled': True,
         },
     },
@@ -437,10 +437,18 @@ AREA_STATISTICS = {
     },
 
     # Area calculation scale (meters) - larger = faster but less precise
-    'scale': 100,
+    'scale': 30,  # 30m is a common compromise for area stats
+
+    # Plot generation controls
+    # If True, regenerate plots from existing CSV outputs without re-computing GEE statistics
+    'regenerate_plots_only': False,
+    # Slide-friendly 16:9 figure sizes (inches)
+    'plot_figsize': [6.5, 3.5],
+    'plot_heatmap_figsize': [12.0, 7.0],
+    'plot_dpi': 300,
 
     # Export area stats to GEE assets
-    'export_assets': True,
+    'export_assets': False,
     'asset_prefix_stats': 'area_stats_consolidated',
     'overwrite_assets': True,
     'wait_for_exports': True,

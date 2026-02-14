@@ -41,15 +41,24 @@ sns.set_palette('husl')
 OUTPUT_DIR = Path('output') / __config__.CURRENT_STUDY_AREA / AREA_CONFIG.get('output_subfolder', 'embeddings_classification')
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+PLOTS_ONLY_MODE = AREA_CONFIG.get('regenerate_plots_only', False)
+YEARLY_CSV_PATH = OUTPUT_DIR / 'class_areas_by_year.csv'
+CONSOLIDATED_CSV_PATH = OUTPUT_DIR / 'consolidated_class_areas.csv'
+
 
 # %%
 # Initialize Earth Engine
-print("Initializing Earth Engine...")
-initialize_earth_engine()
+if not PLOTS_ONLY_MODE:
+    print("Initializing Earth Engine...")
+    initialize_earth_engine()
 
-study_area_config = __config__.get_study_area()
-study_area = study_area_config['geometry']
-study_area_name = study_area_config['name']
+    study_area_config = __config__.get_study_area()
+    study_area = study_area_config['geometry']
+    study_area_name = study_area_config['name']
+else:
+    study_area = None
+    study_area_name = __config__.STUDY_AREAS[__config__.CURRENT_STUDY_AREA]['name']
+    print("Plots-only mode enabled: reusing existing CSV statistics (no EE computation).")
 
 print(f"Study area: {study_area_name}")
 print(f"Output directory: {OUTPUT_DIR}")
@@ -118,25 +127,26 @@ print(f"  Scale: {area_scale}m")
 
 # %%
 # Check yearly assets
-print("\nChecking yearly classification assets...")
-missing_years = []
-for year in yearly_years:
-    asset_id = f"projects/{__config__.PROJECT_ID}/assets/{yearly_asset_folder}/{yearly_asset_prefix}_{year}"
-    if asset_exists(asset_id):
-        print(f"  {year}: ✓ Found")
-    else:
-        print(f"  {year}: ✗ Missing")
-        missing_years.append(year)
+if not PLOTS_ONLY_MODE:
+    print("\nChecking yearly classification assets...")
+    missing_years = []
+    for year in yearly_years:
+        asset_id = f"projects/{__config__.PROJECT_ID}/assets/{yearly_asset_folder}/{yearly_asset_prefix}_{year}"
+        if asset_exists(asset_id):
+            print(f"  {year}: ✓ Found")
+        else:
+            print(f"  {year}: ✗ Missing")
+            missing_years.append(year)
 
-if missing_years:
-    yearly_years = [y for y in yearly_years if y not in missing_years]
-    print(f"\n⚠️ Missing yearly assets skipped: {missing_years}")
+    if missing_years:
+        yearly_years = [y for y in yearly_years if y not in missing_years]
+        print(f"\n⚠️ Missing yearly assets skipped: {missing_years}")
 
 
 # %%
 # Calculate yearly areas
 yearly_areas = {}
-if yearly_years:
+if not PLOTS_ONLY_MODE and yearly_years:
     print("\nCalculating yearly area statistics...")
     yearly_areas = calculate_areas_from_assets(
         yearly_years,
@@ -145,7 +155,7 @@ if yearly_years:
         asset_folder=yearly_asset_folder,
         asset_prefix=yearly_asset_prefix,
     )
-else:
+elif not PLOTS_ONLY_MODE:
     print("\n⚠️ No yearly assets available for area statistics.")
 
 
@@ -217,37 +227,38 @@ consolidated_areas = {}
 consolidated_images_for_export = {}
 consolidated_meta = {}
 
-print("\nChecking consolidated assets...")
-for variant_key, info in selected_consolidated.items():
-    asset_name = info['asset_name']
-    asset_id = f"projects/{__config__.PROJECT_ID}/assets/{consolidated_asset_folder}/{asset_name}"
+if not PLOTS_ONLY_MODE:
+    print("\nChecking consolidated assets...")
+    for variant_key, info in selected_consolidated.items():
+        asset_name = info['asset_name']
+        asset_id = f"projects/{__config__.PROJECT_ID}/assets/{consolidated_asset_folder}/{asset_name}"
 
-    if not asset_exists(asset_id):
-        print(f"  {variant_key}: ✗ Missing")
-        continue
+        if not asset_exists(asset_id):
+            print(f"  {variant_key}: ✗ Missing")
+            continue
 
-    print(f"  {variant_key}: ✓ Found")
-    img = ee.Image(asset_id)
-    class_band = get_class_band_name(img)
-    areas = calculate_areas_from_image(img, study_area, area_scale, class_band=class_band)
+        print(f"  {variant_key}: ✓ Found")
+        img = ee.Image(asset_id)
+        class_band = get_class_band_name(img)
+        areas = calculate_areas_from_image(img, study_area, area_scale, class_band=class_band)
 
-    consolidated_areas[variant_key] = areas
-    consolidated_images_for_export[variant_key] = img.select(class_band)
-    consolidated_meta[variant_key] = {
-        'asset_id': asset_id,
-        'asset_name': asset_name,
-        'label': info.get('label', variant_key),
-        'class_band': class_band,
-        'total_area_km2': sum(areas.values()),
-    }
+        consolidated_areas[variant_key] = areas
+        consolidated_images_for_export[variant_key] = img.select(class_band)
+        consolidated_meta[variant_key] = {
+            'asset_id': asset_id,
+            'asset_name': asset_name,
+            'label': info.get('label', variant_key),
+            'class_band': class_band,
+            'total_area_km2': sum(areas.values()),
+        }
 
-if not consolidated_areas:
-    print("\n⚠️ No consolidated assets available for consolidated area stats.")
+    if not consolidated_areas:
+        print("\n⚠️ No consolidated assets available for consolidated area stats.")
 
 
 # %%
 # Optional exports as table assets
-if AREA_CONFIG.get('export_assets', False):
+if not PLOTS_ONLY_MODE and AREA_CONFIG.get('export_assets', False):
     print("\nExporting area statistics tables to GEE assets...")
     all_export_tasks = []
 
@@ -286,47 +297,70 @@ if AREA_CONFIG.get('export_assets', False):
 
 # %%
 # Build yearly dataframe
-yearly_records = []
-for year, areas in yearly_areas.items():
-    total = sum(areas.values()) if areas else 0
-    for cid, area_km2 in areas.items():
-        orig_class_id = yearly_class_mapping['to_class'].get(cid, cid)
-        label = yearly_idx_labels.get(cid, f'Class {orig_class_id}')
+if PLOTS_ONLY_MODE:
+    if YEARLY_CSV_PATH.exists():
+        df_yearly = pd.read_csv(YEARLY_CSV_PATH)
+        print(f"✓ Loaded yearly statistics from {YEARLY_CSV_PATH}")
+    else:
+        df_yearly = pd.DataFrame()
+        print(f"⚠️ Missing yearly CSV: {YEARLY_CSV_PATH}")
+else:
+    yearly_records = []
+    for year, areas in yearly_areas.items():
+        total = sum(areas.values()) if areas else 0
+        for cid, area_km2 in areas.items():
+            orig_class_id = yearly_class_mapping['to_class'].get(cid, cid)
+            label = yearly_idx_labels.get(cid, f'Class {orig_class_id}')
 
-        class_type_name = None
-        for tname, class_ids in yearly_class_types.items():
-            if orig_class_id in class_ids:
-                class_type_name = tname
-                break
+            class_type_name = None
+            for tname, class_ids in yearly_class_types.items():
+                if orig_class_id in class_ids:
+                    class_type_name = tname
+                    break
 
-        yearly_records.append({
-            'year': int(year),
-            'class_seq_id': int(cid),
-            'class_orig_id': int(orig_class_id),
-            'class_label': label,
-            'class_type': class_type_name or 'Other',
-            'area_km2': float(area_km2),
-            'area_pct': (float(area_km2) / total * 100) if total > 0 else 0.0,
-        })
+            yearly_records.append({
+                'year': int(year),
+                'class_seq_id': int(cid),
+                'class_orig_id': int(orig_class_id),
+                'class_label': label,
+                'class_type': class_type_name or 'Other',
+                'area_km2': float(area_km2),
+                'area_pct': (float(area_km2) / total * 100) if total > 0 else 0.0,
+            })
 
-df_yearly = pd.DataFrame(yearly_records)
+    df_yearly = pd.DataFrame(yearly_records)
 
 # Build consolidated dataframe
-consolidated_records = []
-for variant, areas in consolidated_areas.items():
-    total = sum(areas.values()) if areas else 0
-    for cid, area_km2 in areas.items():
-        consolidated_records.append({
-            'variant_key': variant,
-            'variant_label': consolidated_meta[variant]['label'],
-            'class_id': int(cid),
-            'class_label': aggregated_labels.get(cid, f'Class {cid}'),
-            'class_type': consolidated_class_to_type.get(cid, 'Other'),
-            'area_km2': float(area_km2),
-            'area_pct': (float(area_km2) / total * 100) if total > 0 else 0.0,
-        })
+if PLOTS_ONLY_MODE:
+    if CONSOLIDATED_CSV_PATH.exists():
+        df_consolidated = pd.read_csv(CONSOLIDATED_CSV_PATH)
+        print(f"✓ Loaded consolidated statistics from {CONSOLIDATED_CSV_PATH}")
+        for row in df_consolidated[['variant_key', 'variant_label']].drop_duplicates().itertuples(index=False):
+            consolidated_meta[row.variant_key] = {
+                'label': row.variant_label,
+                'asset_id': None,
+                'class_band': None,
+                'total_area_km2': float(df_consolidated[df_consolidated['variant_key'] == row.variant_key]['area_km2'].sum()),
+            }
+    else:
+        df_consolidated = pd.DataFrame()
+        print(f"⚠️ Missing consolidated CSV: {CONSOLIDATED_CSV_PATH}")
+else:
+    consolidated_records = []
+    for variant, areas in consolidated_areas.items():
+        total = sum(areas.values()) if areas else 0
+        for cid, area_km2 in areas.items():
+            consolidated_records.append({
+                'variant_key': variant,
+                'variant_label': consolidated_meta[variant]['label'],
+                'class_id': int(cid),
+                'class_label': aggregated_labels.get(cid, f'Class {cid}'),
+                'class_type': consolidated_class_to_type.get(cid, 'Other'),
+                'area_km2': float(area_km2),
+                'area_pct': (float(area_km2) / total * 100) if total > 0 else 0.0,
+            })
 
-df_consolidated = pd.DataFrame(consolidated_records)
+    df_consolidated = pd.DataFrame(consolidated_records)
 
 
 # %%
@@ -352,7 +386,43 @@ print("\n" + "="*70)
 
 # %%
 # ===== Improved plotting =====
-# A) Yearly: stacked area by aggregated type over years
+PLOT_DPI = AREA_CONFIG.get('plot_dpi', 300)
+PLOT_FIGSIZE = tuple(AREA_CONFIG.get('plot_figsize', [13.33, 7.5]))
+generated_plot_paths = []
+
+
+def _save_and_close(fig, paths):
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+    for path in paths:
+        fig.savefig(path, dpi=PLOT_DPI, bbox_inches='tight')
+        generated_plot_paths.append(Path(path))
+        print(f"✓ Plot saved to {path}")
+    plt.close(fig)
+
+
+def _build_type_palette(type_map, class_palette):
+    palette = {}
+    for type_name, class_ids in type_map.items():
+        chosen = None
+        for cid in class_ids:
+            if cid in class_palette:
+                chosen = class_palette[cid]
+                break
+        palette[type_name] = chosen or '#777777'
+    palette['Other'] = '#777777'
+    return palette
+
+
+preferred_type_order = ['Irrigated', 'Rainfed', 'Native Veg.', 'Water', 'Urban', 'Bare', 'Other']
+LEGEND_RECT = [0, 0, 0.8, 1]
+TITLE_FONT_SIZE = AREA_CONFIG.get('plot_title_fontsize', 9)
+AXIS_LABEL_FONT_SIZE = AREA_CONFIG.get('plot_axis_label_fontsize', 8)
+TICK_LABEL_FONT_SIZE = AREA_CONFIG.get('plot_tick_label_fontsize', 7)
+LEGEND_FONT_SIZE = AREA_CONFIG.get('plot_legend_fontsize', 7)
+LEGEND_TITLE_FONT_SIZE = AREA_CONFIG.get('plot_legend_title_fontsize', 8)
+
+# A) Yearly plots (high-level + detailed)
 if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
     yearly_type = (
         df_yearly
@@ -362,34 +432,207 @@ if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
         .fillna(0)
     )
 
-    type_order = [t for t in ['Irrigated', 'Rainfed', 'Native Veg.', 'Water', 'Urban', 'Bare'] if t in yearly_type.columns] + [c for c in yearly_type.columns if c not in ['Irrigated', 'Rainfed', 'Native Veg.', 'Water', 'Urban', 'Bare']]
-    yearly_type = yearly_type[type_order]
+    yearly_type_order = [t for t in preferred_type_order if t in yearly_type.columns] + [
+        t for t in yearly_type.columns if t not in preferred_type_order
+    ]
+    yearly_type = yearly_type[yearly_type_order]
 
-    type_palette = {
-        'Irrigated': '#67179C',
-        'Rainfed': '#f4912e',
-        'Native Veg.': '#2b8c3e',
-        'Water': '#0055be',
-        'Urban': '#000000',
-        'Bare': '#a59b8f',
-        'Other': '#777777',
-    }
-    type_colors = [type_palette.get(t, '#777777') for t in yearly_type.columns]
+    yearly_type_palette = _build_type_palette(yearly_class_types, yearly_cluster_palette)
+    yearly_type_colors = [yearly_type_palette.get(t, '#777777') for t in yearly_type.columns]
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    yearly_type.plot(kind='bar', stacked=True, ax=ax, color=type_colors, edgecolor='white', linewidth=0.5)
-    ax.set_title('Yearly Classified Areas by Aggregated Type (km²)', fontsize=13, fontweight='bold')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Area (km²)')
-    ax.legend(title='Type', bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8)
-    ax.grid(axis='y', alpha=0.25, linestyle='--')
-    plt.tight_layout()
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    yearly_type.plot(
+        kind='bar',
+        stacked=True,
+        ax=ax,
+        color=yearly_type_colors,
+        edgecolor='white',
+        linewidth=0.4,
+    )
+    ax.set_title('Yearly Classified Area by Aggregated Type', fontsize=TITLE_FONT_SIZE, fontweight='bold')
+    ax.set_xlabel('Year', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', labelrotation=90, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.legend(title='Class Type', loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=LEGEND_FONT_SIZE, title_fontsize=LEGEND_TITLE_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    fig.tight_layout(rect=LEGEND_RECT)
+    _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_type_km2.png')
 
-    yearly_plot_path = OUTPUT_DIR / 'yearly_area_by_type.png'
-    plt.savefig(yearly_plot_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Plot saved to {yearly_plot_path}")
+    yearly_class = (
+        df_yearly
+        .groupby(['year', 'class_label'], as_index=False)['area_km2']
+        .sum()
+        .pivot(index='year', columns='class_label', values='area_km2')
+        .fillna(0)
+    )
+    yearly_class_order = [
+        yearly_cluster_labels.get(cid, f'Class {cid}')
+        for cid in unique_classes
+        if yearly_cluster_labels.get(cid, f'Class {cid}') in yearly_class.columns
+    ]
+    yearly_class = yearly_class[[c for c in yearly_class_order if c in yearly_class.columns]]
+    yearly_class_colors = [
+        yearly_cluster_palette.get(cid, '#CCCCCC')
+        for cid in unique_classes
+        if yearly_cluster_labels.get(cid, f'Class {cid}') in yearly_class.columns
+    ]
 
-# B) Consolidated variants comparison
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    yearly_class.plot(
+        kind='bar',
+        stacked=True,
+        ax=ax,
+        color=yearly_class_colors,
+        edgecolor='white',
+        linewidth=0.3,
+    )
+    ax.set_title('Yearly Classified Area by Detailed Class', fontsize=TITLE_FONT_SIZE, fontweight='bold')
+    ax.set_xlabel('Year', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', labelrotation=90, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.legend(title='Detailed Class', loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=LEGEND_FONT_SIZE, title_fontsize=LEGEND_TITLE_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    fig.tight_layout(rect=LEGEND_RECT)
+    _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_class_km2.png')
+
+    yearly_combined_detail = (
+        df_yearly
+        .groupby(['class_orig_id', 'class_label', 'class_type'], as_index=False)['area_km2']
+        .mean()
+    )
+    type_rank_yearly = {name: idx for idx, name in enumerate(preferred_type_order)}
+    yearly_combined_detail['type_rank'] = yearly_combined_detail['class_type'].map(
+        lambda value: type_rank_yearly.get(value, 999)
+    )
+    yearly_combined_detail = yearly_combined_detail.sort_values(
+        ['type_rank', 'class_orig_id', 'class_label']
+    ).reset_index(drop=True)
+    yearly_combined_colors = [
+        yearly_type_palette.get(type_name, '#777777')
+        for type_name in yearly_combined_detail['class_type']
+    ]
+
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    bar_container = ax.bar(
+        yearly_combined_detail['class_label'],
+        yearly_combined_detail['area_km2'],
+        color=yearly_combined_colors,
+        edgecolor='white',
+        linewidth=0.4,
+    )
+    ax.set_title('All-years Combined Detailed Class Area (Grouped by Landcover Class)', fontsize=TITLE_FONT_SIZE, fontweight='bold', pad=24)
+    ax.set_xlabel('Detailed class', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Mean area across years (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', rotation=70, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+
+    max_height = yearly_combined_detail['area_km2'].max() if not yearly_combined_detail.empty else 0
+    label_offset = max(max_height * 0.008, 10)
+    for rect, value in zip(bar_container, yearly_combined_detail['area_km2']):
+        x_center = rect.get_x() + rect.get_width() / 2
+        y_top = rect.get_height()
+        ax.text(
+            x_center,
+            y_top + label_offset,
+            f"{value:,.0f} km²",
+            ha='center',
+            va='bottom',
+            fontsize=6,
+            rotation=90,
+        )
+
+    ax.set_ylim(0, max(max_height * 1.28, max_height + label_offset * 6))
+
+    legend_types_yearly = [
+        type_name for type_name in preferred_type_order
+        if type_name in yearly_combined_detail['class_type'].unique()
+    ]
+    legend_handles_yearly = [
+        plt.Rectangle((0, 0), 1, 1, color=yearly_type_palette.get(type_name, '#777777'))
+        for type_name in legend_types_yearly
+    ]
+    ax.legend(
+        legend_handles_yearly,
+        legend_types_yearly,
+        title='Landcover Class',
+        loc='upper left',
+        bbox_to_anchor=(1.01, 1),
+        fontsize=LEGEND_FONT_SIZE,
+        title_fontsize=LEGEND_TITLE_FONT_SIZE,
+    )
+
+    fig.tight_layout(rect=[0, 0, 0.8, 0.9])
+    _save_and_close(fig, OUTPUT_DIR / 'all_years_combined_all_classes_by_main_category_km2.png')
+
+    # Multirow panel line plot: major categories only (independent y-axis)
+    yearly_line = (
+        df_yearly
+        .groupby(['year', 'class_type'], as_index=False)['area_km2']
+        .sum()
+    )
+    line_class_order = [
+        class_type for class_type in preferred_type_order
+        if class_type in yearly_line['class_type'].unique() and class_type != 'Other'
+    ]
+
+    if line_class_order:
+        n_panels = len(line_class_order)
+        panel_height = AREA_CONFIG.get('line_panel_height', 0.6)
+        panel_figsize = (5, max(3.6, n_panels * panel_height))
+        fig, axes = plt.subplots(n_panels, 1, figsize=panel_figsize, sharex=True)
+        if n_panels == 1:
+            axes = [axes]
+
+        for idx, class_label in enumerate(line_class_order):
+            ax = axes[idx]
+            class_df = yearly_line[yearly_line['class_type'] == class_label].sort_values('year')
+            class_color = yearly_type_palette.get(class_label, '#777777')
+
+            x_vals = class_df['year'].astype(int).tolist()
+            y_vals = class_df['area_km2'].astype(float).tolist()
+
+            ax.plot(
+                x_vals,
+                y_vals,
+                color=class_color,
+                marker='o',
+                linewidth=1.4,
+                markersize=3.2,
+            )
+
+            y_min = min(y_vals) if y_vals else 0
+            y_max = max(y_vals) if y_vals else 0
+            y_span = max(y_max - y_min, 1.0)
+            y_pad = max(y_span * 0.08, y_max * 0.01, 1.0)
+            label_offset = y_pad * 0.35
+
+            for x_val, y_val in zip(x_vals, y_vals):
+                ax.text(
+                    x_val,
+                    y_val + label_offset,
+                    f"{y_val:,.0f}",
+                    ha='center',
+                    va='bottom',
+                    fontsize=5,
+                    color=class_color,
+                )
+
+            ax.set_title(class_label, loc='left', fontsize=7, fontweight='bold', pad=1)
+            ax.set_ylabel('')
+            ax.tick_params(axis='y', left=False, labelleft=False)
+            ax.grid(axis='both', alpha=0.2, linestyle='--')
+            ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+        axes[-1].set_xlabel('Year', fontsize=AXIS_LABEL_FONT_SIZE)
+        axes[-1].tick_params(axis='x', labelsize=TICK_LABEL_FONT_SIZE)
+        fig.suptitle('Yearly Area Trend by Landcover Class (km²)', fontsize=TITLE_FONT_SIZE, fontweight='bold', y=0.998)
+        fig.tight_layout(rect=[0, 0, 1, 0.995], h_pad=0.08)
+        _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_landcover_class_panel_lines_km2.png')
+
+# B) Consolidated variant plots (high-level + detailed)
 if not df_consolidated.empty:
     variant_order = [v for v in ['early', 'late', 'combined'] if v in df_consolidated['variant_key'].unique()] + [
         v for v in df_consolidated['variant_key'].unique() if v not in ['early', 'late', 'combined']
@@ -400,6 +643,41 @@ if not df_consolidated.empty:
     class_labels = [aggregated_labels.get(c, f'Class {c}') for c in class_order]
     class_colors = [aggregated_palette.get(c, '#CCCCCC') for c in class_order]
 
+    consolidated_type = (
+        df_consolidated
+        .groupby(['variant_label', 'class_type'], as_index=False)['area_km2']
+        .sum()
+        .pivot(index='variant_label', columns='class_type', values='area_km2')
+        .fillna(0)
+        .reindex(index=variant_labels)
+    )
+    consolidated_type_order = [t for t in preferred_type_order if t in consolidated_type.columns] + [
+        t for t in consolidated_type.columns if t not in preferred_type_order
+    ]
+    consolidated_type = consolidated_type[consolidated_type_order]
+
+    consolidated_type_palette = _build_type_palette(consolidated_type_map, aggregated_palette)
+    consolidated_type_colors = [consolidated_type_palette.get(t, '#777777') for t in consolidated_type.columns]
+
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    consolidated_type.plot(
+        kind='bar',
+        stacked=True,
+        ax=ax,
+        color=consolidated_type_colors,
+        edgecolor='white',
+        linewidth=0.4,
+    )
+    ax.set_title('Consolidated Area by Aggregated Type', fontsize=TITLE_FONT_SIZE, fontweight='bold')
+    ax.set_xlabel('Consolidation variant', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', labelrotation=90, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.legend(title='Class Type', loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=LEGEND_FONT_SIZE, title_fontsize=LEGEND_TITLE_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    fig.tight_layout(rect=LEGEND_RECT)
+    _save_and_close(fig, OUTPUT_DIR / 'consolidated_area_by_type_km2.png')
+
     pivot_class = (
         df_consolidated
         .pivot_table(index='variant_label', columns='class_label', values='area_km2', aggfunc='sum', fill_value=0)
@@ -407,96 +685,83 @@ if not df_consolidated.empty:
     )
     pivot_class = pivot_class[[lbl for lbl in class_labels if lbl in pivot_class.columns]]
 
-    pivot_pct = (
-        df_consolidated
-        .pivot_table(index='class_label', columns='variant_label', values='area_pct', aggfunc='sum', fill_value=0)
-        .reindex(index=class_labels)
-        .reindex(columns=variant_labels)
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    pivot_class.plot(
+        kind='bar',
+        stacked=True,
+        ax=ax,
+        color=class_colors[:len(pivot_class.columns)],
+        edgecolor='white',
+        linewidth=0.3,
     )
-
-    fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 1, height_ratios=[1, 1.1])
-
-    ax1 = fig.add_subplot(gs[0, 0])
-    pivot_class.plot(kind='bar', stacked=True, ax=ax1, color=class_colors[:len(pivot_class.columns)], edgecolor='white', linewidth=0.5)
-    ax1.set_title('Consolidated Areas by Class (km²)', fontsize=13, fontweight='bold')
-    ax1.set_xlabel('Variant')
-    ax1.set_ylabel('Area (km²)')
-    ax1.legend(title='Class', bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8)
-    ax1.grid(axis='y', alpha=0.25, linestyle='--')
-
-    ax2 = fig.add_subplot(gs[1, 0])
-    sns.heatmap(
-        pivot_pct,
-        ax=ax2,
-        annot=True,
-        fmt='.1f',
-        cmap='YlGnBu',
-        linewidths=0.4,
-        cbar_kws={'label': 'Share of total area (%)'}
-    )
-    ax2.set_title('Class Share by Consolidation Variant (%)', fontsize=13, fontweight='bold')
-    ax2.set_xlabel('Variant')
-    ax2.set_ylabel('Class')
-
-    plt.tight_layout()
-    consolidated_plot_path = OUTPUT_DIR / 'consolidated_area_comparison.png'
-    plt.savefig(consolidated_plot_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Plot saved to {consolidated_plot_path}")
+    ax.set_title('Consolidated Area by Detailed Class', fontsize=TITLE_FONT_SIZE, fontweight='bold')
+    ax.set_xlabel('Consolidation variant', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', labelrotation=90, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.legend(title='Detailed Class', loc='upper left', bbox_to_anchor=(1.01, 1), fontsize=LEGEND_FONT_SIZE, title_fontsize=LEGEND_TITLE_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    fig.tight_layout(rect=LEGEND_RECT)
+    _save_and_close(fig, OUTPUT_DIR / 'consolidated_area_by_class_km2.png')
 
 
 # %%
 # Save outputs
-if not df_yearly.empty:
-    yearly_csv = OUTPUT_DIR / 'class_areas_by_year.csv'
-    df_yearly.sort_values(['year', 'class_seq_id']).to_csv(yearly_csv, index=False)
-    print(f"✓ Yearly area statistics saved to {yearly_csv}")
+if not PLOTS_ONLY_MODE:
+    if not df_yearly.empty:
+        yearly_csv = OUTPUT_DIR / 'class_areas_by_year.csv'
+        df_yearly.sort_values(['year', 'class_seq_id']).to_csv(yearly_csv, index=False)
+        print(f"✓ Yearly area statistics saved to {yearly_csv}")
 
-if not df_consolidated.empty:
-    consolidated_csv = OUTPUT_DIR / 'consolidated_class_areas.csv'
-    df_consolidated.sort_values(['variant_key', 'class_id']).to_csv(consolidated_csv, index=False)
-    print(f"✓ Consolidated area statistics saved to {consolidated_csv}")
+    if not df_consolidated.empty:
+        consolidated_csv = OUTPUT_DIR / 'consolidated_class_areas.csv'
+        df_consolidated.sort_values(['variant_key', 'class_id']).to_csv(consolidated_csv, index=False)
+        print(f"✓ Consolidated area statistics saved to {consolidated_csv}")
 
-summary = {
-    'project_id': __config__.PROJECT_ID,
-    'study_area': study_area_name,
-    'date_processed': pd.Timestamp.now().isoformat(),
-    'scale_meters': area_scale,
-    'yearly': {
-        'asset_folder': yearly_asset_folder,
-        'asset_prefix': yearly_asset_prefix,
-        'years': sorted([int(y) for y in yearly_areas.keys()]),
-        'class_labels': {str(k): v for k, v in yearly_idx_labels.items()},
-        'class_types': yearly_class_types,
-        'statistics_km2': {
-            str(y): {str(int(cid)): float(area) for cid, area in yearly_areas.get(y, {}).items()}
-            for y in sorted(yearly_areas.keys())
+    summary = {
+        'project_id': __config__.PROJECT_ID,
+        'study_area': study_area_name,
+        'date_processed': pd.Timestamp.now().isoformat(),
+        'scale_meters': area_scale,
+        'yearly': {
+            'asset_folder': yearly_asset_folder,
+            'asset_prefix': yearly_asset_prefix,
+            'years': sorted([int(y) for y in yearly_areas.keys()]),
+            'class_labels': {str(k): v for k, v in yearly_idx_labels.items()},
+            'class_types': yearly_class_types,
+            'statistics_km2': {
+                str(y): {str(int(cid)): float(area) for cid, area in yearly_areas.get(y, {}).items()}
+                for y in sorted(yearly_areas.keys())
+            },
         },
-    },
-    'consolidated': {
-        'asset_folder': consolidated_asset_folder,
-        'variants': {
-            k: {
-                'label': consolidated_meta[k]['label'],
-                'asset_id': consolidated_meta[k]['asset_id'],
-                'class_band': consolidated_meta[k]['class_band'],
-                'total_area_km2': consolidated_meta[k]['total_area_km2'],
-            }
-            for k in consolidated_meta
+        'consolidated': {
+            'asset_folder': consolidated_asset_folder,
+            'variants': {
+                k: {
+                    'label': consolidated_meta[k]['label'],
+                    'asset_id': consolidated_meta[k]['asset_id'],
+                    'class_band': consolidated_meta[k]['class_band'],
+                    'total_area_km2': consolidated_meta[k]['total_area_km2'],
+                }
+                for k in consolidated_meta
+            },
+            'aggregated_labels': {str(k): v for k, v in aggregated_labels.items()},
+            'class_types': consolidated_type_map,
+            'statistics_km2': {
+                k: {str(int(cid)): float(area) for cid, area in consolidated_areas.get(k, {}).items()}
+                for k in consolidated_areas
+            },
         },
-        'aggregated_labels': {str(k): v for k, v in aggregated_labels.items()},
-        'class_types': consolidated_type_map,
-        'statistics_km2': {
-            k: {str(int(cid)): float(area) for cid, area in consolidated_areas.get(k, {}).items()}
-            for k in consolidated_areas
-        },
-    },
-}
+    }
 
-summary_path = OUTPUT_DIR / 'area_statistics_summary.json'
-with open(summary_path, 'w') as f:
-    json.dump(summary, f, indent=2)
-print(f"✓ Summary saved to {summary_path}")
+    summary_path = OUTPUT_DIR / 'area_statistics_summary.json'
+    with open(summary_path, 'w') as f:
+        json.dump(summary, f, indent=2)
+    print(f"✓ Summary saved to {summary_path}")
+else:
+    summary_path = OUTPUT_DIR / 'area_statistics_summary.json'
+    if summary_path.exists():
+        print(f"✓ Existing summary preserved at {summary_path}")
 
 
 # %%
@@ -509,10 +774,10 @@ print(f"Scale: {area_scale}m")
 print(f"\nOutputs saved to: {OUTPUT_DIR}")
 if not df_yearly.empty:
     print("  - class_areas_by_year.csv")
-    print("  - yearly_area_by_type.png")
 if not df_consolidated.empty:
     print("  - consolidated_class_areas.csv")
-    print("  - consolidated_area_comparison.png")
+for plot_path in generated_plot_paths:
+    print(f"  - {plot_path.name}")
 print("  - area_statistics_summary.json")
 print("\n" + "="*70)
 
