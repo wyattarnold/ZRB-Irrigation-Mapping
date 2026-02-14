@@ -497,76 +497,6 @@ if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
     fig.tight_layout(rect=LEGEND_RECT)
     _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_class_km2.png')
 
-    yearly_combined_detail = (
-        df_yearly
-        .groupby(['class_orig_id', 'class_label', 'class_type'], as_index=False)['area_km2']
-        .mean()
-    )
-    type_rank_yearly = {name: idx for idx, name in enumerate(preferred_type_order)}
-    yearly_combined_detail['type_rank'] = yearly_combined_detail['class_type'].map(
-        lambda value: type_rank_yearly.get(value, 999)
-    )
-    yearly_combined_detail = yearly_combined_detail.sort_values(
-        ['type_rank', 'class_orig_id', 'class_label']
-    ).reset_index(drop=True)
-    yearly_combined_colors = [
-        yearly_type_palette.get(type_name, '#777777')
-        for type_name in yearly_combined_detail['class_type']
-    ]
-
-    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
-    bar_container = ax.bar(
-        yearly_combined_detail['class_label'],
-        yearly_combined_detail['area_km2'],
-        color=yearly_combined_colors,
-        edgecolor='white',
-        linewidth=0.4,
-    )
-    ax.set_title('All-years Combined Detailed Class Area (Grouped by Landcover Class)', fontsize=TITLE_FONT_SIZE, fontweight='bold', pad=24)
-    ax.set_xlabel('Detailed class', fontsize=AXIS_LABEL_FONT_SIZE)
-    ax.set_ylabel('Mean area across years (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
-    ax.tick_params(axis='x', rotation=70, labelsize=TICK_LABEL_FONT_SIZE)
-    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-
-    max_height = yearly_combined_detail['area_km2'].max() if not yearly_combined_detail.empty else 0
-    label_offset = max(max_height * 0.008, 10)
-    for rect, value in zip(bar_container, yearly_combined_detail['area_km2']):
-        x_center = rect.get_x() + rect.get_width() / 2
-        y_top = rect.get_height()
-        ax.text(
-            x_center,
-            y_top + label_offset,
-            f"{value:,.0f} km²",
-            ha='center',
-            va='bottom',
-            fontsize=6,
-            rotation=90,
-        )
-
-    ax.set_ylim(0, max(max_height * 1.28, max_height + label_offset * 6))
-
-    legend_types_yearly = [
-        type_name for type_name in preferred_type_order
-        if type_name in yearly_combined_detail['class_type'].unique()
-    ]
-    legend_handles_yearly = [
-        plt.Rectangle((0, 0), 1, 1, color=yearly_type_palette.get(type_name, '#777777'))
-        for type_name in legend_types_yearly
-    ]
-    ax.legend(
-        legend_handles_yearly,
-        legend_types_yearly,
-        title='Landcover Class',
-        loc='upper left',
-        bbox_to_anchor=(1.01, 1),
-        fontsize=LEGEND_FONT_SIZE,
-        title_fontsize=LEGEND_TITLE_FONT_SIZE,
-    )
-
-    fig.tight_layout(rect=[0, 0, 0.8, 0.9])
-    _save_and_close(fig, OUTPUT_DIR / 'all_years_combined_all_classes_by_main_category_km2.png')
-
     # Multirow panel line plot: major categories only (independent y-axis)
     yearly_line = (
         df_yearly
@@ -631,6 +561,80 @@ if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
         fig.suptitle('Yearly Area Trend by Landcover Class (km²)', fontsize=TITLE_FONT_SIZE, fontweight='bold', y=0.998)
         fig.tight_layout(rect=[0, 0, 1, 0.995], h_pad=0.08)
         _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_landcover_class_panel_lines_km2.png')
+
+# A.2) All-years consolidated class plot (from consolidated combined source)
+if not df_consolidated.empty and 'combined' in df_consolidated['variant_key'].unique():
+    combined_detail = (
+        df_consolidated[df_consolidated['variant_key'] == 'combined']
+        [['class_id', 'class_label', 'class_type', 'area_km2']]
+        .copy()
+    )
+    type_rank_combined = {name: idx for idx, name in enumerate(preferred_type_order)}
+    combined_detail['type_rank'] = combined_detail['class_type'].map(
+        lambda value: type_rank_combined.get(value, 999)
+    )
+    combined_detail = combined_detail.sort_values(
+        ['type_rank', 'class_id', 'class_label']
+    ).reset_index(drop=True)
+
+    consolidated_type_palette = _build_type_palette(consolidated_type_map, aggregated_palette)
+    combined_colors = [
+        consolidated_type_palette.get(type_name, '#777777')
+        for type_name in combined_detail['class_type']
+    ]
+
+    fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
+    bar_container = ax.bar(
+        combined_detail['class_label'],
+        combined_detail['area_km2'],
+        color=combined_colors,
+        edgecolor='white',
+        linewidth=0.4,
+    )
+    ax.set_title('All-Years Consolidated Class Area (Grouped by Landcover Class)', fontsize=TITLE_FONT_SIZE, fontweight='bold', pad=24)
+    ax.set_xlabel('Consolidated class', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.tick_params(axis='x', rotation=70, labelsize=TICK_LABEL_FONT_SIZE)
+    ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+
+    max_height = combined_detail['area_km2'].max() if not combined_detail.empty else 0
+    label_offset = max(max_height * 0.008, 10)
+    for rect, value in zip(bar_container, combined_detail['area_km2']):
+        x_center = rect.get_x() + rect.get_width() / 2
+        y_top = rect.get_height()
+        ax.text(
+            x_center,
+            y_top + label_offset,
+            f"{value:,.0f} km²",
+            ha='center',
+            va='bottom',
+            fontsize=6,
+            rotation=90,
+        )
+
+    ax.set_ylim(0, max(max_height * 1.28, max_height + label_offset * 6))
+
+    legend_types_combined = [
+        type_name for type_name in preferred_type_order
+        if type_name in combined_detail['class_type'].unique()
+    ]
+    legend_handles_combined = [
+        plt.Rectangle((0, 0), 1, 1, color=consolidated_type_palette.get(type_name, '#777777'))
+        for type_name in legend_types_combined
+    ]
+    ax.legend(
+        legend_handles_combined,
+        legend_types_combined,
+        title='Landcover Class',
+        loc='upper left',
+        bbox_to_anchor=(1.01, 1),
+        fontsize=LEGEND_FONT_SIZE,
+        title_fontsize=LEGEND_TITLE_FONT_SIZE,
+    )
+
+    fig.tight_layout(rect=[0, 0, 0.8, 0.9])
+    _save_and_close(fig, OUTPUT_DIR / 'consolidated_all_years_all_classes_by_main_category_km2.png')
 
 # B) Consolidated variant plots (high-level + detailed)
 if not df_consolidated.empty:

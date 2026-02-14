@@ -21,6 +21,7 @@ The codebase is organized as a 3-step pipeline:
 1. **Training data collection** (`_01a` to `_01d`) for landcover and crop samples
 2. **Clustering** (`_02b`, `_02c`) using DTW to separate crop behavior patterns
 3. **Classification and consolidation** (`_03a` to `_03c`) using satellite embeddings and multi-year aggregation
+4. **Transition analysis** (`_03d`) for year-to-year class-change matrices and Sankey diagrams
 
 Core shared utilities live in:
 

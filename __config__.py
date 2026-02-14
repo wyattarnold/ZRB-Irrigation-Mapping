@@ -437,7 +437,7 @@ AREA_STATISTICS = {
     },
 
     # Area calculation scale (meters) - larger = faster but less precise
-    'scale': 30,  # 30m is a common compromise for area stats
+    'scale': 10,  # 30m is a common compromise for area stats
 
     # Plot generation controls
     # If True, regenerate plots from existing CSV outputs without re-computing GEE statistics
@@ -573,6 +573,49 @@ CONSOLIDATION = {
     'combined_asset_name': 'consolidated_all_years_classified',
     'overwrite_assets': True,
     
+}
+
+
+# ============================================================================
+# ============================================================================
+#                      STEP 3d: TRANSITION ANALYSIS
+#                      (_03d_transition_analysis.py)
+# ============================================================================
+# ============================================================================
+
+TRANSITION_ANALYSIS = {
+    'years': CONSOLIDATION.get('years', [2019, 2020, 2021, 2022, 2023, 2024]),
+    'asset_folder': EMBEDDINGS_CLASSIFICATION.get('asset_folder', f"{CURRENT_STUDY_AREA}/classification"),
+    'asset_prefix': CONSOLIDATION.get('asset_prefix', 'classified'),
+    'transition_schema': 'detailed',  # Options: 'detailed', 'aggregated'
+
+    # Detailed schema defaults
+    'class_labels': EMBEDDINGS_CLASSIFICATION.get('cluster_labels', {}),
+    'class_palette': EMBEDDINGS_CLASSIFICATION.get('cluster_palette', {}),
+    'class_types': EMBEDDINGS_CLASSIFICATION.get('class_types', {}),
+
+    # Aggregated schema mapping (used when transition_schema='aggregated')
+    'class_aggregation': CONSOLIDATION.get('class_aggregation', {}),
+    'aggregated_labels': CONSOLIDATION.get('aggregated_labels', {}),
+    'aggregated_palette': CONSOLIDATION.get('aggregated_palette', {}),
+
+    'scale': 10,
+    'min_flow_km2': 20.0,
+    'generate_pairwise_flow_plots': False,
+    'generate_multiyear_flow_plot': True,
+    'multiyear_flow_width_in': 6.5,
+    'generate_major_focus_flow_plots': True,
+    'major_focus_categories': [],  # [] = generate for all major categories
+
+    # Consolidated early/late transition (from _03b outputs)
+    'compute_consolidated_early_late_transition': True,
+    'consolidated_early_asset_name': CONSOLIDATION.get('early_asset_name', 'consolidated_2024_weighted'),
+    'consolidated_late_asset_name': CONSOLIDATION.get('late_asset_name', 'consolidated_2019_weighted'),
+    'consolidated_use_confidence_weight': True,
+    'consolidated_use_probability_weight': False,
+    'consolidated_min_confidence': 10,  # confidence is 0-100 in consolidated assets
+
+    'output_subfolder': 'embeddings_classification/transitions',
 }
 
 
