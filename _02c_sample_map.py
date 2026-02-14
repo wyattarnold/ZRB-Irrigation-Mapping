@@ -18,17 +18,19 @@ from pathlib import Path
 
 import pandas as pd
 import folium
-import matplotlib.pyplot as plt
-import numpy as np
 from branca.element import MacroElement, Template
+from folium.plugins import FastMarkerCluster
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 import __config__
+from src.gee_utils import initialize_earth_engine
 
 
 # %%
 print("Initializing self-contained map build...")
+
+initialize_earth_engine()
 
 study_area_key = __config__.CURRENT_STUDY_AREA
 study_cfg = __config__.get_study_area(study_area_key)
@@ -62,6 +64,79 @@ LANDCOVER_COLORS = {
     'bare': '#8C7A6B',
 }
 
+CLUSTER_COLORS = [
+    '#1f78b4', '#33a02c', '#e31a1c', '#ff7f00', '#6a3d9a',
+    '#a6cee3', '#b2df8a', '#fb9a99', '#fdbf6f', '#cab2d6',
+]
+
+# Sample map controls from central config
+PERF_DEFAULTS = {
+    'prefer_canvas': True,
+    'show_landcover_layers': False,
+    'show_all_year_layers': True,
+    'show_year_specific_layers': False,
+    'build_all_year_layers': True,
+    'build_year_specific_layers': False,
+}
+PERF = {
+    **PERF_DEFAULTS,
+    **getattr(__config__, 'SAMPLE_MAP', {}),
+}
+
+
+def _add_point_layer(
+    feature_group: folium.FeatureGroup,
+    layer_df: pd.DataFrame,
+    color: str,
+    radius: float,
+    fill_opacity: float,
+) -> None:
+    """Add points to a feature group using FastMarkerCluster."""
+    points = (
+        layer_df[['lat', 'lon']]
+        .dropna()
+        .astype(float)
+        .values
+        .tolist()
+    )
+    callback = f"""
+    function (row) {{
+        return L.circleMarker(new L.LatLng(row[0], row[1]), {{
+            radius: {radius},
+            color: '#000000',
+            weight: 0.5,
+            fillColor: '{color}',
+            fillOpacity: {fill_opacity}
+        }});
+    }}
+    """
+    FastMarkerCluster(data=points, callback=callback).add_to(feature_group)
+
+
+def _add_cluster_layers(
+    map_obj: folium.Map,
+    cluster_df: pd.DataFrame,
+    cluster_color_map: dict[int, str],
+    show_layers: bool,
+    layer_name_fn,
+    fill_opacity: float,
+) -> None:
+    """Build cluster feature groups from a cluster dataframe subset."""
+    for cid in sorted(cluster_df['cluster'].unique()):
+        cid_df = cluster_df[cluster_df['cluster'] == cid]
+        color = cluster_color_map.get(int(cid), '#808080')
+        layer_name = layer_name_fn(int(cid), cid_df)
+
+        fg = folium.FeatureGroup(name=layer_name, show=show_layers)
+        _add_point_layer(
+            feature_group=fg,
+            layer_df=cid_df,
+            color=color,
+            radius=3,
+            fill_opacity=fill_opacity,
+        )
+        fg.add_to(map_obj)
+
 
 # %%
 print("Loading CSV data...")
@@ -86,9 +161,8 @@ cluster_years = [int(y) for y in sorted(df_cluster_map['year'].unique())]
 if len(cluster_ids) == 0:
     raise ValueError("No clustered samples found after merging clustering_results.csv with coordinates.")
 
-cluster_colors = plt.cm.tab20(np.linspace(0, 1, max(len(cluster_ids), 1)))
 cluster_hex = {
-    cid: f"#{int(cluster_colors[i][0]*255):02x}{int(cluster_colors[i][1]*255):02x}{int(cluster_colors[i][2]*255):02x}"
+    cid: CLUSTER_COLORS[i % len(CLUSTER_COLORS)]
     for i, cid in enumerate(cluster_ids)
 }
 
@@ -105,6 +179,7 @@ m = folium.Map(
     zoom_start=zoom,
     tiles=None,
     control_scale=True,
+    prefer_canvas=PERF['prefer_canvas'],
 )
 
 # Basemaps (public, high-res where available)
@@ -135,94 +210,50 @@ for class_name in landcover_classes:
     class_df = df_landcover[df_landcover['class_name'] == class_name]
     color = LANDCOVER_COLORS.get(class_name, '#808080')
 
-    fg = folium.FeatureGroup(name=f"Landcover {class_name} ({len(class_df)})", show=True)
+    fg = folium.FeatureGroup(
+        name=f"Landcover {class_name} ({len(class_df)})",
+        show=PERF['show_landcover_layers'],
+    )
 
-    for _, row in class_df.iterrows():
-        popup_text = (
-            f"Landcover: {class_name}<br>"
-            f"Year: {int(row['year']) if pd.notna(row.get('year')) else 'NA'}<br>"
-            f"Lon: {float(row['lon']):.6f}<br>"
-            f"Lat: {float(row['lat']):.6f}"
-        )
-        folium.CircleMarker(
-            location=[float(row['lat']), float(row['lon'])],
-            radius=2,
-            color='#000000',
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.85,
-            weight=0.5,
-            popup=popup_text,
-        ).add_to(fg)
+    _add_point_layer(
+        feature_group=fg,
+        layer_df=class_df,
+        color=color,
+        radius=2,
+        fill_opacity=0.85,
+    )
 
     fg.add_to(m)
 
 
 # %%
 # Add clustered layers by year and cluster (year-specific)
-print("Adding clustered sample layers (year-specific)...")
-latest_year = max(cluster_years)
+if PERF['build_year_specific_layers']:
+    print("Adding clustered sample layers (year-specific)...")
 
 # Add all-years cluster toggle layers
 print("Adding clustered sample layers (all-years toggles)...")
-for cid in cluster_ids:
-    cluster_all_df = df_cluster_map[df_cluster_map['cluster'] == cid]
-    color = cluster_hex.get(cid, '#808080')
+if PERF['build_all_year_layers']:
+    _add_cluster_layers(
+        map_obj=m,
+        cluster_df=df_cluster_map,
+        cluster_color_map=cluster_hex,
+        show_layers=PERF['show_all_year_layers'],
+        layer_name_fn=lambda cid, cid_df: f"Cluster ALL Years - C{cid} ({len(cid_df)})",
+        fill_opacity=0.8,
+    )
 
-    layer_name = f"Cluster ALL Years - C{cid} ({len(cluster_all_df)})"
-    fg_all = folium.FeatureGroup(name=layer_name, show=True)
-
-    for _, row in cluster_all_df.iterrows():
-        popup_text = (
-            f"Sample: {int(row['sample_num'])}<br>"
-            f"Year: {int(row['year'])}<br>"
-            f"Cluster: {int(row['cluster'])}<br>"
-            f"Lon: {float(row['lon']):.6f}<br>"
-            f"Lat: {float(row['lat']):.6f}"
+if PERF['build_year_specific_layers']:
+    for year in cluster_years:
+        year_df = df_cluster_map[df_cluster_map['year'] == year]
+        _add_cluster_layers(
+            map_obj=m,
+            cluster_df=year_df,
+            cluster_color_map=cluster_hex,
+            show_layers=PERF['show_year_specific_layers'],
+            layer_name_fn=lambda cid, cid_df, year=year: f"Clusters {year} - C{cid} ({len(cid_df)})",
+            fill_opacity=0.9,
         )
-        folium.CircleMarker(
-            location=[float(row['lat']), float(row['lon'])],
-            radius=3,
-            color='#000000',
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.8,
-            weight=0.5,
-            popup=popup_text,
-        ).add_to(fg_all)
-
-    fg_all.add_to(m)
-
-for year in cluster_years:
-    year_df = df_cluster_map[df_cluster_map['year'] == year]
-
-    for cid in sorted(year_df['cluster'].unique()):
-        cluster_df = year_df[year_df['cluster'] == cid]
-        color = cluster_hex.get(cid, '#808080')
-
-        layer_name = f"Clusters {year} - C{cid} ({len(cluster_df)})"
-        fg = folium.FeatureGroup(name=layer_name, show=False)
-
-        for _, row in cluster_df.iterrows():
-            popup_text = (
-                f"Sample: {int(row['sample_num'])}<br>"
-                f"Year: {int(row['year'])}<br>"
-                f"Cluster: {int(row['cluster'])}<br>"
-                f"Lon: {float(row['lon']):.6f}<br>"
-                f"Lat: {float(row['lat']):.6f}"
-            )
-            folium.CircleMarker(
-                location=[float(row['lat']), float(row['lon'])],
-                radius=3,
-                color='#000000',
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.9,
-                weight=0.5,
-                popup=popup_text,
-            ).add_to(fg)
-
-        fg.add_to(m)
 
 
 # %%
@@ -294,6 +325,12 @@ print(f"✓ Saved map to: {map_path}")
 print("\nIncluded:")
 print("  - Public basemaps (Google Satellite / OSM)")
 print("  - Cleaned landcover samples from CSV")
-print("  - Clustered samples by cluster (ALL years toggle)")
-print("  - Clustered samples by year and cluster from CSV")
+if PERF['build_all_year_layers']:
+    print("  - Clustered samples by cluster (ALL years toggle)")
+if PERF['build_year_specific_layers']:
+    print("  - Clustered samples by year and cluster from CSV")
+print("\nPerformance settings:")
+print(f"  - prefer_canvas: {PERF['prefer_canvas']}")
+print(f"  - build_all_year_layers: {PERF['build_all_year_layers']}")
+print(f"  - build_year_specific_layers: {PERF['build_year_specific_layers']}")
 print("  - Built-in legend for landcover classes and cluster IDs")

@@ -225,6 +225,25 @@ CLUSTERING = {
 }
 
 
+# ----------------------------------------------------------------------------
+# Sample QA Map Settings
+# Used by: _02c_sample_map.py
+# ----------------------------------------------------------------------------
+SAMPLE_MAP = {
+    # Leaflet canvas rendering is faster for large vector layers
+    'prefer_canvas': True,
+
+    # Layer visibility defaults
+    'show_landcover_layers': False,
+    'show_all_year_layers': True,
+    'show_year_specific_layers': False,
+
+    # Build-time controls (False skips creating those layers)
+    'build_all_year_layers': True,
+    'build_year_specific_layers': False,
+}
+
+
 # ============================================================================
 # ============================================================================
 #                        STEP 3: CLASSIFICATION
