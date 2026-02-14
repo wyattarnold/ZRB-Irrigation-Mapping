@@ -591,37 +591,7 @@ if export_tasks:
     print(f"\n✓ {successful}/{len(export_tasks)} exports completed successfully")
 
 # %% [markdown]
-## 8. Save Configuration Summary
-
-# %%
-# Save configuration summary
-summary = {
-    'study_area': study_area_name,
-    'years_consolidated': years,
-    'n_aggregated_classes': n_aggregated_classes,
-    'class_aggregation': class_aggregation,
-    'aggregated_labels': aggregated_labels,
-    'early_weights': early_weights,
-    'late_weights': late_weights,
-    'combined_weights': combined_weights,
-    'use_spatial_confidence': use_spatial,
-    'neighborhood_radius': neighborhood_radius if use_spatial else None,
-    'spatial_weight': spatial_weight if use_spatial else None,
-    'scale': scale,
-    'process_combined_only': process_combined_only,
-    'early_asset': early_asset_id if (CONSOL_CONFIG.get('export_early_weighted', True) and not process_combined_only) else None,
-    'late_asset': late_asset_id if (CONSOL_CONFIG.get('export_late_weighted', True) and not process_combined_only) else None,
-    'combined_asset': combined_asset_id if CONSOL_CONFIG.get('export_combined_classified', True) else None,
-}
-
-summary_path = OUTPUT_DIR / 'consolidation_summary.json'
-import json
-with open(summary_path, 'w') as f:
-    json.dump(summary, f, indent=2)
-print(f"\n✓ Configuration summary saved to {summary_path}")
-
-# %% [markdown]
-## 9. Final Summary
+## 8. Final Summary
 
 # %%
 print("\n" + "="*70)
