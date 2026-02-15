@@ -18,7 +18,7 @@ earthengine authenticate
 
 Use the published Earth Engine app to view the mapping outputs:
 
-- https://warnold.users.earthengine.app/view/zrb-cropping
+- https://ee-warnold.projects.earthengine.app/view/zrb-irrigation-mapping
 
 ## Detailed Documentation
 
