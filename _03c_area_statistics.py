@@ -44,6 +44,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PLOTS_ONLY_MODE = AREA_CONFIG.get('regenerate_plots_only', False)
 YEARLY_CSV_PATH = OUTPUT_DIR / 'class_areas_by_year.csv'
 CONSOLIDATED_CSV_PATH = OUTPUT_DIR / 'consolidated_class_areas.csv'
+REFERENCE_CSV_PATH = OUTPUT_DIR / 'reference_mask_areas.csv'
 
 
 # %%
@@ -221,6 +222,23 @@ def calculate_areas_from_image(image, region, scale, class_band='classification'
     return area_by_class
 
 
+def calculate_mask_area_km2(mask_image, region, scale):
+    """Calculate total area (km²) where a binary mask is 1."""
+    masked_area_img = ee.Image.pixelArea().divide(1e6).updateMask(mask_image)
+    result = _retry_with_backoff(
+        lambda: masked_area_img.reduceRegion(
+            reducer=ee.Reducer.sum(),
+            geometry=region,
+            scale=scale,
+            maxPixels=1e10,
+            bestEffort=True,
+        ).getInfo()
+    )
+    if not result:
+        return 0.0
+    return float(next(iter(result.values()))) if result else 0.0
+
+
 # %%
 # Calculate consolidated areas
 consolidated_areas = {}
@@ -254,6 +272,76 @@ if not PLOTS_ONLY_MODE:
 
     if not consolidated_areas:
         print("\n⚠️ No consolidated assets available for consolidated area stats.")
+
+
+# %%
+# Calculate reference mask areas (Budkyo + HCCP strata)
+reference_rows = []
+reference_cfg = AREA_CONFIG.get('reference_masks', {})
+
+if PLOTS_ONLY_MODE:
+    if REFERENCE_CSV_PATH.exists():
+        df_reference = pd.read_csv(REFERENCE_CSV_PATH)
+        print(f"✓ Loaded reference mask statistics from {REFERENCE_CSV_PATH}")
+    else:
+        df_reference = pd.DataFrame()
+        print(f"⚠️ Missing reference-mask CSV: {REFERENCE_CSV_PATH}")
+else:
+    print("\nCalculating reference mask areas...")
+
+    budkyo_rainfed_asset = reference_cfg.get('budkyo_rainfed_asset')
+    if budkyo_rainfed_asset:
+        if asset_exists(budkyo_rainfed_asset):
+            rainfed_mask = ee.Image(budkyo_rainfed_asset).select('b1').eq(1)
+            rainfed_area = calculate_mask_area_km2(rainfed_mask, study_area, area_scale)
+            reference_rows.append({
+                'source': 'Budkyo Rainfed',
+                'metric': 'b1==1',
+                'area_km2': rainfed_area,
+                'asset_id': budkyo_rainfed_asset,
+            })
+            print(f"  ✓ Budkyo Rainfed (b1==1): {rainfed_area:,.2f} km²")
+        else:
+            print(f"  ⚠️ Missing Budkyo Rainfed asset: {budkyo_rainfed_asset}")
+
+    budkyo_irrigated_asset = reference_cfg.get('budkyo_irrigated_asset')
+    if budkyo_irrigated_asset:
+        if asset_exists(budkyo_irrigated_asset):
+            irrigated_mask = ee.Image(budkyo_irrigated_asset).select('b1').eq(1)
+            irrigated_area = calculate_mask_area_km2(irrigated_mask, study_area, area_scale)
+            reference_rows.append({
+                'source': 'Budkyo Irrigated',
+                'metric': 'b1==1',
+                'area_km2': irrigated_area,
+                'asset_id': budkyo_irrigated_asset,
+            })
+            print(f"  ✓ Budkyo Irrigated (b1==1): {irrigated_area:,.2f} km²")
+        else:
+            print(f"  ⚠️ Missing Budkyo Irrigated asset: {budkyo_irrigated_asset}")
+
+    hccp_asset = reference_cfg.get('hccp_asset')
+    hccp_bins = reference_cfg.get('hccp_confidence_bins', [])
+    if hccp_asset and hccp_bins:
+        if asset_exists(hccp_asset):
+            hccp_b1 = ee.Image(hccp_asset).select('b1')
+            for bin_cfg in hccp_bins:
+                min_conf = int(bin_cfg['min'])
+                max_conf = int(bin_cfg['max'])
+                label = str(bin_cfg.get('label', f"{min_conf}-{max_conf}"))
+                hccp_mask = hccp_b1.gte(min_conf).And(hccp_b1.lte(max_conf))
+                hccp_area = calculate_mask_area_km2(hccp_mask, study_area, area_scale)
+                reference_rows.append({
+                    'source': 'HCCP',
+                    'metric': f'b1 in [{min_conf},{max_conf}]',
+                    'stratum': label,
+                    'area_km2': hccp_area,
+                    'asset_id': hccp_asset,
+                })
+                print(f"  ✓ HCCP {label}% confidence (b1 {min_conf}-{max_conf}): {hccp_area:,.2f} km²")
+        else:
+            print(f"  ⚠️ Missing HCCP asset: {hccp_asset}")
+
+    df_reference = pd.DataFrame(reference_rows)
 
 
 # %%
@@ -383,6 +471,14 @@ if not df_consolidated.empty:
 
 print("\n" + "="*70)
 
+if not df_reference.empty:
+    print("\nReference masks:")
+    for row in df_reference.itertuples(index=False):
+        descriptor = f"{row.source} {row.metric}"
+        if hasattr(row, 'stratum') and pd.notna(getattr(row, 'stratum', None)):
+            descriptor = f"{descriptor} ({row.stratum})"
+        print(f"  {descriptor}: {float(row.area_km2):,.2f} km²")
+
 
 # %%
 # ===== Improved plotting =====
@@ -509,17 +605,23 @@ if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
     ]
 
     if line_class_order:
+        from matplotlib.colors import to_rgba
+
         n_panels = len(line_class_order)
-        panel_height = AREA_CONFIG.get('line_panel_height', 0.6)
-        panel_figsize = (5, max(3.6, n_panels * panel_height))
+        panel_height = AREA_CONFIG.get('line_panel_height', 0.55)
+        panel_figsize = (3.5, max(3.0, n_panels * panel_height))
         fig, axes = plt.subplots(n_panels, 1, figsize=panel_figsize, sharex=True)
         if n_panels == 1:
             axes = [axes]
 
+        fig.patch.set_facecolor('white')
+
         for idx, class_label in enumerate(line_class_order):
             ax = axes[idx]
+            ax.set_facecolor('white')
             class_df = yearly_line[yearly_line['class_type'] == class_label].sort_values('year')
             class_color = yearly_type_palette.get(class_label, '#777777')
+            fill_color = to_rgba(class_color, alpha=0.10)
 
             x_vals = class_df['year'].astype(int).tolist()
             y_vals = class_df['area_km2'].astype(float).tolist()
@@ -530,37 +632,167 @@ if not df_yearly.empty and len(df_yearly['year'].unique()) >= 1:
                 color=class_color,
                 marker='o',
                 linewidth=1.4,
-                markersize=3.2,
+                markersize=3,
+                zorder=3,
             )
+            ax.fill_between(x_vals, y_vals, alpha=0.10, color=class_color, zorder=1)
 
             y_min = min(y_vals) if y_vals else 0
             y_max = max(y_vals) if y_vals else 0
             y_span = max(y_max - y_min, 1.0)
-            y_pad = max(y_span * 0.08, y_max * 0.01, 1.0)
-            label_offset = y_pad * 0.35
+            y_pad = max(y_span * 0.25, y_max * 0.01, 1.0)
 
-            for x_val, y_val in zip(x_vals, y_vals):
+            # Label only first and last points
+            if len(x_vals) >= 2:
+                first_val, last_val = y_vals[0], y_vals[-1]
+                label_offset = y_pad * 0.12
+
                 ax.text(
-                    x_val,
-                    y_val + label_offset,
-                    f"{y_val:,.0f}",
-                    ha='center',
-                    va='bottom',
-                    fontsize=5,
-                    color=class_color,
+                    x_vals[0], first_val + label_offset,
+                    f"{first_val:,.0f}",
+                    ha='center', va='bottom', fontsize=5,
+                    color=class_color, fontweight='semibold',
+                )
+                ax.text(
+                    x_vals[-1], last_val + label_offset,
+                    f"{last_val:,.0f}",
+                    ha='center', va='bottom', fontsize=5,
+                    color=class_color, fontweight='semibold',
                 )
 
-            ax.set_title(class_label, loc='left', fontsize=7, fontweight='bold', pad=1)
+                # Net change annotation on the right margin
+                net_change = last_val - first_val
+                pct_change = (net_change / first_val * 100) if first_val != 0 else 0
+                sign = '+' if net_change >= 0 else ''
+                ax.annotate(
+                    f"{sign}{pct_change:.1f}%",
+                    xy=(1.01, 0.5), xycoords='axes fraction',
+                    fontsize=5, color=class_color, fontweight='bold',
+                    va='center', ha='left',
+                )
+
+            ax.set_title(class_label, loc='left', fontsize=7, fontweight='bold', pad=2)
             ax.set_ylabel('')
             ax.tick_params(axis='y', left=False, labelleft=False)
-            ax.grid(axis='both', alpha=0.2, linestyle='--')
+
+            # Minimal horizontal gridlines only
+            ax.grid(axis='y', alpha=0.15, linestyle='-', linewidth=0.5)
+            ax.grid(axis='x', visible=False)
+            for spine in ['top', 'right', 'left']:
+                ax.spines[spine].set_visible(False)
+            ax.spines['bottom'].set_linewidth(0.4)
+            ax.spines['bottom'].set_color('#cccccc')
+
             ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+            # Hide x-tick labels on non-bottom panels
+            if idx < n_panels - 1:
+                ax.tick_params(axis='x', labelbottom=False, length=0)
 
         axes[-1].set_xlabel('Year', fontsize=AXIS_LABEL_FONT_SIZE)
         axes[-1].tick_params(axis='x', labelsize=TICK_LABEL_FONT_SIZE)
+        axes[-1].spines['bottom'].set_color('#999999')
         fig.suptitle('Yearly Area Trend by Landcover Class (km²)', fontsize=TITLE_FONT_SIZE, fontweight='bold', y=0.998)
-        fig.tight_layout(rect=[0, 0, 1, 0.995], h_pad=0.08)
+        fig.tight_layout(rect=[0, 0, 0.94, 0.99], h_pad=0.15)
         _save_and_close(fig, OUTPUT_DIR / 'yearly_area_by_landcover_class_panel_lines_km2.png')
+
+    # A.1b) Consolidated all-years stacked bar (same height & class order as panel line plot)
+    if not df_consolidated.empty and 'combined' in df_consolidated['variant_key'].unique():
+        combined_by_type = (
+            df_consolidated[df_consolidated['variant_key'] == 'combined']
+            .groupby('class_type', as_index=False)['area_km2']
+            .sum()
+        )
+        bar_types = [t for t in line_class_order if t in combined_by_type['class_type'].values]
+        type_areas = combined_by_type.set_index('class_type').reindex(bar_types)['area_km2']
+        total_area = type_areas.sum()
+
+        # Reverse stacking order so first item in line_class_order ends up on TOP
+        stack_order = list(reversed(bar_types))
+
+        bar_figsize = (2.8, panel_figsize[1])
+        fig, ax = plt.subplots(figsize=bar_figsize)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+
+        # Stack segments (bottom-to-top = reversed line_class_order)
+        segment_midpoints = {}
+        bottom = 0
+        for class_type in stack_order:
+            area = type_areas[class_type]
+            color = yearly_type_palette.get(class_type, '#777777')
+            ax.bar(
+                0, area, bottom=bottom, width=0.5,
+                color=color, edgecolor='white', linewidth=0.4,
+            )
+            segment_midpoints[class_type] = bottom + area / 2
+            bottom += area
+
+        ax.set_xlim(-0.5, 0.5)
+        ax.set_xticks([])
+
+        # Build callout annotations to the right, spaced to avoid overlap
+        callout_data = []
+        for class_type in bar_types:
+            area = type_areas[class_type]
+            pct = area / total_area * 100
+            mid_y = segment_midpoints[class_type]
+            color = yearly_type_palette.get(class_type, '#777777')
+            callout_data.append({
+                'class_type': class_type,
+                'area': area,
+                'pct': pct,
+                'mid_y': mid_y,
+                'color': color,
+            })
+
+        # Sort callouts by midpoint position and space them out
+        callout_data.sort(key=lambda d: d['mid_y'])
+        y_range = bottom
+        min_gap = y_range * 0.065  # minimum vertical gap between labels
+        placed_y = []
+        for item in callout_data:
+            target_y = item['mid_y']
+            # Push up if too close to previous label
+            if placed_y and target_y < placed_y[-1] + min_gap:
+                target_y = placed_y[-1] + min_gap
+            placed_y.append(target_y)
+            item['label_y'] = target_y
+
+        # Draw callout lines + text
+        x_bar_edge = 0.25  # right edge of bar (width=0.5, centered at 0)
+        x_text = 0.42
+        for item in callout_data:
+            label = f"{item['class_type']}\n{item['area']:,.0f} km² ({item['pct']:.1f}%)"
+            ax.annotate(
+                label,
+                xy=(x_bar_edge, item['mid_y']),
+                xytext=(x_text, item['label_y']),
+                fontsize=5, fontweight='semibold', color=item['color'],
+                va='center', ha='left',
+                arrowprops=dict(
+                    arrowstyle='-',
+                    color=item['color'],
+                    lw=0.6,
+                    shrinkA=0, shrinkB=2,
+                ),
+            )
+
+        ax.set_ylabel('Area (km²)', fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.tick_params(axis='y', labelsize=TICK_LABEL_FONT_SIZE)
+        ax.set_title('Consolidated Composition (km²)', fontsize=TITLE_FONT_SIZE, fontweight='bold')
+
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+        ax.spines['left'].set_linewidth(0.4)
+        ax.spines['left'].set_color('#cccccc')
+        ax.spines['bottom'].set_linewidth(0.4)
+        ax.spines['bottom'].set_color('#999999')
+        ax.grid(axis='y', alpha=0.15, linestyle='-', linewidth=0.5)
+        ax.grid(axis='x', visible=False)
+
+        fig.tight_layout(rect=[0, 0, 0.99, 0.99])
+        _save_and_close(fig, OUTPUT_DIR / 'consolidated_all_years_stacked_bar_km2.png')
 
 # A.2) All-years consolidated class plot (from consolidated combined source)
 if not df_consolidated.empty and 'combined' in df_consolidated['variant_key'].unique():
@@ -722,6 +954,12 @@ if not PLOTS_ONLY_MODE:
         df_consolidated.sort_values(['variant_key', 'class_id']).to_csv(consolidated_csv, index=False)
         print(f"✓ Consolidated area statistics saved to {consolidated_csv}")
 
+    if not df_reference.empty:
+        reference_csv = OUTPUT_DIR / 'reference_mask_areas.csv'
+        sort_cols = [col for col in ['source', 'stratum', 'metric'] if col in df_reference.columns]
+        df_reference.sort_values(sort_cols).to_csv(reference_csv, index=False)
+        print(f"✓ Reference mask area statistics saved to {reference_csv}")
+
     summary = {
         'project_id': __config__.PROJECT_ID,
         'study_area': study_area_name,
@@ -756,6 +994,10 @@ if not PLOTS_ONLY_MODE:
                 for k in consolidated_areas
             },
         },
+        'reference_masks': {
+            'assets': reference_cfg,
+            'statistics_km2': df_reference.to_dict(orient='records') if not df_reference.empty else [],
+        },
     }
 
     summary_path = OUTPUT_DIR / 'area_statistics_summary.json'
@@ -780,6 +1022,8 @@ if not df_yearly.empty:
     print("  - class_areas_by_year.csv")
 if not df_consolidated.empty:
     print("  - consolidated_class_areas.csv")
+if not df_reference.empty:
+    print("  - reference_mask_areas.csv")
 for plot_path in generated_plot_paths:
     print(f"  - {plot_path.name}")
 print("  - area_statistics_summary.json")

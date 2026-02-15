@@ -136,8 +136,13 @@ CLOUD_SCORE_THRESHOLD = 0.60
 # ----------------------------------------------------------------------------
 # Sample Collection Settings
 # ----------------------------------------------------------------------------
-START_SAMPLE_ID = 3001   # First sample number (allows batch collection: 1-20, then 21-40)
-END_SAMPLE_ID = 4000    # Last sample number (inclusive)
+START_SAMPLE_ID = 1   # First sample number (allows batch collection: 1-20, then 21-40)
+END_SAMPLE_ID = 1000    # Last sample number (inclusive)
+
+# Crop point sampling seed used by _01d_collect_crop_samples.py
+# None = choose a new random seed each run (prevents repeated locations across ID ranges)
+# Integer = fixed/reproducible sampling
+SAMPLE_POINT_SEED = None
 
 # ----------------------------------------------------------------------------
 # Training Crop Mask - WHERE TO SAMPLE CROP POINTS
@@ -322,7 +327,7 @@ EMBEDDINGS_CLASSIFICATION = {
     # Auto-detect: loads from asset if exists, else creates directly and exports
     'training_samples_asset_folder': f"{CURRENT_STUDY_AREA}/{TRAINING_ASSET_SUBFOLDER}",
     'training_samples_asset_prefix': 'training_samples',
-    'training_samples_overwrite_assets': False,  # Overwrite if re-creating
+    'training_samples_overwrite_assets': True,  # Overwrite if re-creating
     'skip_training_sample_counts': False,  # Skip size() getInfo calls to reduce timeouts
     
     # --- Export ---
@@ -431,6 +436,19 @@ EMBEDDINGS_CLASSIFICATION = {
 AREA_STATISTICS = {
     # Consolidated assets to load (from Step 3b exports)
     'asset_folder': f"{CURRENT_STUDY_AREA}/classification",
+
+    # External/reference crop mask assets for additional area comparisons
+    'reference_masks': {
+        'hccp_asset': 'projects/ee-warnold/assets/crop_masks/HCCP',
+        'budkyo_rainfed_asset': 'projects/ee-warnold/assets/crop_masks/Budkyo_Rainfed',
+        'budkyo_irrigated_asset': 'projects/ee-warnold/assets/crop_masks/Budkyo_Irrigated',
+        # HCCP b1 confidence strata bins: [33-65], [66-99], [100]
+        'hccp_confidence_bins': [
+            {'label': '33-65', 'min': 33, 'max': 65},
+            {'label': '66-99', 'min': 66, 'max': 99},
+            {'label': '100', 'min': 100, 'max': 100},
+        ],
+    },
     'consolidated_assets': {
         'early': {
             'asset_name': 'consolidated_2024_weighted',
