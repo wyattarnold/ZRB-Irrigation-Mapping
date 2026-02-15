@@ -396,7 +396,7 @@ A separate **Gradient Boosted Tree** classifier is trained for each year (2019�
 | Class balancing | Hybrid (floor: 250, cap: 2,000) |
 | Train/test split | Stratified balanced (~80/20) |
 
-Total training data per year is approximately **11,900 samples** (e.g., 9,525 train + 2,382 test for 2023), combining crop cluster labels and landcover samples. All classification and area mapping is performed at the native 10 m resolution of both the Sentinel-2 source data and the AEF embeddings.
+Total training data per year is approximately **11,500 samples** (e.g., 9,159 train + 2,290 test for 2023), combining crop cluster labels and landcover samples. All classification and area mapping is performed at the native 10 m resolution of both the Sentinel-2 source data and the AEF embeddings.
 
 ### Classification Accuracy
 
@@ -404,38 +404,38 @@ Total training data per year is approximately **11,900 samples** (e.g., 9,525 tr
 
 | Year | Test Accuracy | Test Samples |
 |------|--------------|--------------|
-| 2019 | 91.4% | 2,406 |
-| 2020 | 90.7% | 2,484 |
-| 2021 | 90.2% | 2,415 |
-| 2022 | 91.0% | 2,310 |
-| 2023 | 90.4% | 2,382 |
-| 2024 | 91.8% | 2,379 |
-| **Mean** | **90.9%** | — |
+| 2019 | 86.1% | 2,338 |
+| 2020 | 83.2% | 2,392 |
+| 2021 | 81.4% | 2,370 |
+| 2022 | 84.4% | 2,417 |
+| 2023 | 82.6% | 2,290 |
+| 2024 | 84.6% | 2,294 |
+| **Mean** | **83.7%** | — |
 
-Accuracy is consistent across all six years (90.2–91.8%), confirming that AEF embeddings provide stable, year-independent feature representations for this classification task.
+Accuracy remains relatively stable across all six years (81.4–86.1%), with lower performance concentrated in rainfed/natural vegetation boundary classes.
 
 #### Per-Class Accuracy (2023, representative year)
 
 | Class | Label | Correct | Total | Accuracy |
 |-------|-------|---------|-------|----------|
-| 0 | Rainfed (0) | 395 | 400 | 98.8% |
-| 1 | Rainfed (1) | 267 | 271 | 98.5% |
-| 2 | Irrigated (2) | 50 | 50 | 100.0% |
+| 0 | Rainfed (0) | 342 | 400 | 85.5% |
+| 1 | Rainfed (1) | 92 | 179 | 51.4% |
+| 2 | Irrigated (2) | 49 | 50 | 98.0% |
 | 3 | Irrigated (3) | 48 | 50 | 96.0% |
-| 4 | Irrigated (4) | 50 | 50 | 100.0% |
-| 5 | Urban | 275 | 295 | 93.2% |
-| 6 | Water | 335 | 354 | 94.6% |
-| 7 | Flooded Veg. | 94 | 113 | 83.2% |
-| 8 | Trees | 266 | 303 | 87.8% |
-| 9 | Shrubs | 283 | 356 | 79.5% |
-| 10 | Grass | 45 | 72 | 62.5% |
-| 11 | Bare | 46 | 68 | 67.6% |
+| 4 | Irrigated (4) | 47 | 50 | 94.0% |
+| 5 | Urban | 254 | 295 | 86.1% |
+| 6 | Water | 339 | 354 | 95.8% |
+| 7 | Flooded Veg. | 91 | 113 | 80.5% |
+| 8 | Trees | 265 | 303 | 87.5% |
+| 9 | Shrubs | 267 | 356 | 75.0% |
+| 10 | Grass | 47 | 72 | 65.3% |
+| 11 | Bare | 50 | 68 | 73.5% |
 
 **Key observations:**
-- **Irrigated classes achieve near-perfect accuracy** (96–100%), indicating that AEF embeddings strongly differentiate irrigated field characteristics.
-- **Rainfed classes** are also well-classified (98.5–98.8%), with minimal confusion with irrigated classes.
-- **Zero confusion between Irrigated and Rainfed classes** — the confusion matrix shows no misclassifications in either direction, validating the DTW clustering labels.
-- **Confusion concentrates among spectrally similar natural landcover classes** (Grass ↔ Shrubs, Flooded Veg. ↔ Water, Bare ↔ Rainfed), which is expected given their spectral overlap. These classes are not the primary targets of the analysis.
+- **Irrigated classes remain strong** (94–98%), indicating that embeddings still separate irrigated phenology reliably.
+- **Rainfed performance is mixed**: Rainfed (0) remains strong (85.5%), while Rainfed (1) is substantially lower (51.4%), indicating overlap with neighboring vegetation/cropland signatures.
+- **Water is highly separable** (95.8%), while shrub/grass classes remain the most challenging.
+- **Most confusion concentrates among spectrally similar non-target natural classes** (Shrubs, Grass, Flooded Veg., Trees).
 
 #### Aggregated Accuracy by Type
 
@@ -443,14 +443,14 @@ When detailed classes are aggregated into broader categories, irrigation classif
 
 | Type | Precision | Recall | Correct | Actual | Predicted |
 |------|-----------|--------|---------|--------|-----------|
-| **Irrigated** | **100.0%** | **98.7%** | 148 | 150 | 148 |
-| **Rainfed** | **94.6%** | **99.7%** | 669 | 671 | 707 |
-| Urban | 88.4% | 93.2% | 275 | 295 | 311 |
-| Water | 96.3% | 94.6% | 335 | 354 | 348 |
-| Native Veg. | 94.7% | 91.9% | 776 | 844 | 819 |
-| Bare | 93.9% | 67.6% | 46 | 68 | 49 |
+| **Irrigated** | **97.9%** | **95.3%** | 143 | 150 | 146 |
+| **Rainfed** | **86.5%** | **91.6%** | 533 | 582 | 616 |
+| Urban | 87.9% | 83.5% | 218 | 261 | 248 |
+| Water | 97.1% | 96.6% | 372 | 385 | 383 |
+| Native Veg. | 91.6% | 90.5% | 784 | 866 | 856 |
+| Bare | 100.0% | 90.0% | 45 | 50 | 45 |
 
-The irrigated class achieves **100% precision** (no false positives) and **98.7% recall** (only 2 of 150 irrigated samples misclassified — both as Native Vegetation, not as Rainfed). Critically, **zero irrigated samples were confused with rainfed, and vice versa**, confirming that the DTW-derived labels successfully capture a real phenological distinction. This represents a substantial improvement over the Budyko water balance framework of Owusu et al. (2024), which reported 92% precision but only 59% recall for irrigated areas at 300 m resolution.
+The irrigated type retains high performance (**97.9% precision**, **95.3% recall**), while rainfed performance is lower than previous runs (**86.5% precision**, **91.6% recall**) due to stronger confusion with natural vegetation classes in the latest outputs. Even with this reduction, irrigated recall remains substantially higher than the Budyko benchmark of Owusu et al. (2024) (59% recall at 300 m resolution).
 
 ### Irrigated Area Estimates
 
@@ -458,20 +458,20 @@ The following table summarizes estimated irrigated and rainfed crop areas across
 
 | Year | Irrigated (km²) | Rainfed (km²) | Urban (km²) | Water (km²) | Native Veg. (km²) | Bare (km²) |
 |------|-----------------|---------------|-------------|-------------|-------------------|------------|
-| 2019 | 375.9 | 10,297.5 | 4,492.8 | 3,934.3 | 80,606.0 | 364.5 |
-| 2020 | 367.4 | 11,066.7 | 4,106.8 | 3,927.3 | 80,145.5 | 457.3 |
-| 2021 | 451.4 | 9,768.0 | 4,250.2 | 4,031.8 | 81,180.0 | 389.6 |
-| 2022 | 433.9 | 9,514.3 | 3,720.4 | 3,981.3 | 81,790.0 | 631.1 |
-| 2023 | 424.1 | 10,005.3 | 3,781.7 | 3,934.5 | 81,486.4 | 439.1 |
-| 2024 | 388.6 | 11,417.7 | 3,442.7 | 3,748.8 | 80,885.7 | 187.5 |
+| 2019 | 442.4 | 13,200.2 | 4,063.5 | 3,929.9 | 78,134.1 | 300.9 |
+| 2020 | 443.4 | 14,490.3 | 3,782.8 | 3,921.7 | 77,095.4 | 337.5 |
+| 2021 | 525.1 | 13,552.4 | 3,701.0 | 4,033.4 | 77,955.2 | 303.9 |
+| 2022 | 503.6 | 14,577.7 | 3,266.3 | 3,967.9 | 77,210.4 | 545.1 |
+| 2023 | 523.9 | 13,317.6 | 3,288.7 | 3,922.5 | 78,631.6 | 386.8 |
+| 2024 | 495.7 | 16,203.6 | 3,000.2 | 3,739.7 | 76,491.6 | 140.1 |
 
 **Key findings:**
 
-- **Irrigated area ranges from 367 to 451 km²** across the six-year period, with a six-year mean of approximately **407 km²**.
-- **Peak irrigated extent occurred in 2021** (451 km²), followed closely by 2022 (434 km²). These mid-period peaks likely reflect a combination of irrigation infrastructure maturation and favorable conditions for detecting irrigated fields.
-- **Irrigated area increased from 2019–2021** (376 → 451 km²) and then gradually declined through 2024 (389 km²), potentially reflecting interannual climate variability, agricultural management decisions, and the severe 2024 wet-season drought (527 mm).
-- **Rainfed cropland** (9,514–11,418 km²) is 25–30× larger than irrigated area, confirming the dominance of rain-dependent agriculture in the region. Irrigated agriculture represents approximately **3–4% of total cropland** by area.
-- **Non-agricultural classes** (Water, Native Vegetation, Urban, Bare) remain relatively stable across years, as expected, providing a useful consistency check on the classification.
+- **Irrigated area ranges from 442 to 525 km²** across the six-year period, with a six-year mean of approximately **489 km²**.
+- **Peak irrigated extent occurs in 2021 and 2023** (525 and 524 km²), with a moderate decline in 2024 (496 km²).
+- **Irrigated area increases from 2019 to 2024** (442 → 496 km²; +53 km²), while still showing interannual variability likely linked to climate and management effects.
+- **Rainfed cropland** (13,200–16,204 km²) is roughly **25–37× larger** than irrigated area, confirming rainfed dominance. Irrigated cropland remains about **3.0–3.8%** of total cropland.
+- **Urban and bare areas decline toward 2024**, while water remains relatively stable and native vegetation remains the dominant class by area.
 
 ### Precipitation Context
 
@@ -488,7 +488,7 @@ Wet-season precipitation from CHIRPS provides context for interpreting interannu
 | 2023 | 747.4 |
 | 2024 | 527.2 |
 
-The **2019 wet season was severely dry** (424.5 mm, ~60% of the 8-year mean of 707 mm), followed by recovery in 2020–2021. The 2022 season was again below average (692 mm), while 2024 saw another significant decline in precipitation (527.2 mm). Irrigated area peaked in 2021–2022 (434–451 km²) during a period of moderate, near-average rainfall, and declined toward 2024 alongside sharply reduced precipitation. The relationship between rainfall and irrigated extent is complex — unlike simple drought-response models, the data suggest that sustained moderate conditions may support irrigation infrastructure utilization, while extreme droughts (2019, 2024) reduce both rainfed and irrigated agricultural activity.
+The **2019 wet season was severely dry** (424.5 mm, ~60% of the 8-year mean of 707 mm), followed by recovery in 2020–2021. The 2022 season was again below average (692 mm), while 2024 saw another significant decline (527.2 mm). Irrigated area remains comparatively high in 2021–2024 (496–525 km²), suggesting that rainfall alone does not explain annual irrigated extent. The relationship appears multi-factor: precipitation, carry-over soil moisture, operational irrigation capacity, and classification uncertainty all likely contribute.
 
 ### Multi-Year Consolidation
 
@@ -511,11 +511,11 @@ Each variant produces a classification band and a confidence band, exported as G
 
 | Variant | Irrigated (km²) | Rainfed (km²) | Urban (km²) | Water (km²) | Native Veg. (km²) | Bare (km²) |
 |---------|-----------------|---------------|-------------|-------------|-------------------|------------|
-| All-Years (equal) | 409.8 | 11,076.1 | 3,581.4 | 3,979.6 | 80,860.0 | 164.2 |
-| Early (2019) | 375.9 | 10,297.5 | 4,492.8 | 3,934.3 | 80,606.0 | 364.5 |
-| Late (2024) | 388.6 | 11,417.7 | 3,442.7 | 3,748.8 | 80,885.7 | 187.5 |
+| All-Years (equal) | 459.7 | 15,117.4 | 3,133.8 | 3,970.3 | 77,247.6 | 142.3 |
+| Early (2019) | 442.4 | 13,200.2 | 4,063.5 | 3,929.9 | 78,134.1 | 300.9 |
+| Late (2024) | 495.7 | 16,203.6 | 3,000.2 | 3,739.7 | 76,491.6 | 140.1 |
 
-The **all-years consolidated** irrigated area (409.8 km²) is close to the six-year yearly mean (407 km²), as expected from the equal-weighted consensus. The **early** and **late** variants reflect the temporal endpoints of the analysis period, with irrigated area increasing modestly from 375.9 to 388.6 km² (+3.4%).
+The **all-years consolidated** irrigated area (459.7 km²) is lower than the six-year yearly mean (489.0 km²), reflecting the conservative nature of consensus assignment. The **early** and **late** variants indicate irrigated expansion from 442.4 to 495.7 km² (+53.3 km², +12.0%).
 
 ### Transition Analysis
 
@@ -527,22 +527,22 @@ The most policy-relevant transition analysis compares the early-weighted (2019) 
 
 | Transition | Raw (km²) | Weighted (km²) | Retention (%) |
 |------------|-----------|----------------|---------------|
-| Irrigated → Irrigated | 256.1 | 219.8 | 85.8 |
-| Irrigated → Rainfed | 93.6 | 53.4 | — |
-| Rainfed → Irrigated | 70.3 | 43.2 | — |
-| Rainfed → Rainfed | 7,230.3 | 6,182.0 | 85.5 |
-| Trees → Trees | 27,146.0 | 25,533.7 | 94.1 |
-| Shrubs → Shrubs | 35,406.8 | 31,732.1 | 89.6 |
-| Water → Water | 3,696.9 | 3,680.6 | 99.6 |
-| Urban → Urban | 2,071.1 | 1,708.4 | 82.5 |
+| Irrigated → Irrigated | 335.3 | 305.2 | 91.0 |
+| Irrigated → Rainfed | 93.6 | 55.2 | — |
+| Rainfed → Irrigated | 101.4 | 62.6 | — |
+| Rainfed → Rainfed | 10,332.7 | 9,106.9 | 88.1 |
+| Trees → Trees | 27,088.0 | 25,493.1 | 94.1 |
+| Shrubs → Shrubs | 32,546.9 | 28,956.0 | 89.0 |
+| Water → Water | 3,690.3 | 3,674.4 | 99.6 |
+| Urban → Urban | 1,861.1 | 1,541.9 | 82.8 |
 
 **Key transition findings:**
 
-- **Irrigated areas show 85.8% weighted retention** between early and late periods, indicating that the majority of irrigated land remains consistently irrigated.
-- **Net irrigated change is modest**: +12.7 km² from early (375.9 km²) to late (388.6 km²), reflecting a slight expansion of irrigation over the study period.
-- **Water is the most stable class** (99.6% retention), while **urban areas show the most churn** (82.5% retention), reflecting Dynamic World classification variability at urban edges.
-- **The largest inter-class flows** occur between Rainfed ↔ Shrubs and Trees ↔ Shrubs, consistent with the spectral similarity between these natural vegetation and cropland classes.
-- **Irrigated → Rainfed** (53.4 km² weighted) slightly exceeds **Rainfed → Irrigated** (43.2 km² weighted), but the net irrigated area still increases because irrigated pixels are also gained from urban, shrubs, and other classes.
+- **Irrigated areas show 91.0% weighted retention** between early and late periods, indicating strong persistence of irrigated land.
+- **Net irrigated change is +53.3 km²**, from early (442.4 km²) to late (495.7 km²).
+- **Water is the most stable class** (99.6% retention), while **urban areas show the most churn** (82.8% retention), consistent with edge-class variability.
+- **The largest inter-class flows** occur between Rainfed ↔ Shrubs and Trees ↔ Shrubs, consistent with spectral overlap among cropland and natural vegetation classes.
+- **Rainfed → Irrigated** (62.6 km² weighted) now exceeds **Irrigated → Rainfed** (55.2 km² weighted), matching the observed net irrigated increase.
 
 ### Comparison with Benchmark Methods
 
@@ -557,9 +557,9 @@ The table below compares this work with the Budyko water balance framework of Ow
 | Training data | None needed (physics-based) | Auto-generated via DTW clustering |
 | Multi-year coverage | Single year (2019) | **6 years** (2019–2024) with consolidation |
 | Feature representation | 3 climate variables | **64-D learned embeddings** (Brown et al., 2025) |
-| Overall accuracy | 73% (Cohen's κ = 0.48) | **90.9%** (mean across years) |
-| Irrigated precision | 92% | **100%** |
-| Irrigated recall | 59% | **98.7%** |
+| Overall accuracy | 73% (Cohen's κ = 0.48) | **83.7%** (mean across years) |
+| Irrigated precision | 92% | **97.9%** |
+| Irrigated recall | 59% | **95.3%** |
 
 The two approaches are complementary: Budyko excels at continental-scale screening with zero training data, while DTW + embeddings provides field-level precision for targeted regional analysis. The approaches have different failure modes — Budyko fails when ET estimates are inaccurate, while DTW/embeddings may miss supplemental irrigation where irrigated and rainfed temporal profiles are similar.
 
