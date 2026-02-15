@@ -258,6 +258,27 @@ output/{study_area}/
 
 ---
 
+## Reference Method Note (Owusu et al., 2024)
+
+This project's external-reference comparisons (HCCM and Budyko-style partitioning context) follow the framework described in:
+
+- Owusu, A. et al. (2024), *A framework for disaggregating remote-sensing cropland into rainfed and irrigated classes at continental scale*.
+
+Key points used as methodological reference:
+
+- **High-confidence cropland mask construction (HCCM concept):** derive a confidence cropland mask from agreement among top-performing crop masks; Owusu et al. used a **66% agreement threshold** among the selected masks.
+- **Rainfed vs irrigated decision rule:** apply Budyko partitioning to estimate green ET, then compute blue ET as:
+  - `ET_blue = ET_actual - ET_green`
+- **Irrigation identification:** cropland pixels are considered irrigated when blue ET exceeds the local threshold:
+  - `max(mean blue ET over grassland in the sub-catchment, 0.01 mm)`
+- **Irrigation intensity split:**
+  - `ET_blue >= 100 mm` → formal irrigation
+  - `ET_blue < 100 mm` → supplemental irrigation
+
+In this repository, these concepts are used as literature reference for interpretation/benchmarking layers (e.g., Budkyo/HCCM comparisons in area statistics), while the core production workflow remains the project-specific clustering + embeddings pipeline.
+
+---
+
 ## Key Files
 
 | File | Purpose |
