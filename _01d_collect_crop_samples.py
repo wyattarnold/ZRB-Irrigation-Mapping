@@ -14,6 +14,8 @@ import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import time
+import secrets
+from datetime import datetime, timezone
 from collections import defaultdict
 
 import __config__
@@ -109,6 +111,13 @@ print("="*60)
 start_id = __config__.START_SAMPLE_ID
 end_id = __config__.END_SAMPLE_ID
 num_samples = end_id - start_id + 1
+configured_seed = getattr(__config__, 'SAMPLE_POINT_SEED', None)
+if configured_seed is None:
+    sample_seed = secrets.randbelow(2_147_483_647)
+    print(f"Sampling seed: {sample_seed} (random this run)")
+else:
+    sample_seed = int(configured_seed)
+    print(f"Sampling seed: {sample_seed} (from config)")
 print(f"Sample ID range: {start_id:03d} to {end_id:03d} ({num_samples} total)")
 
 def sample_points_from_mask(mask, num, seed, source):
@@ -137,9 +146,28 @@ def sample_points_from_mask(mask, num, seed, source):
 
 print(f"\nSampling from: {mask_source}")
 t0_sample = time.time()
-sampled_points = sample_points_from_mask(crop_mask, num_samples, 42, mask_source)
+sampled_points = sample_points_from_mask(crop_mask, num_samples, sample_seed, mask_source)
 print(f"⏱️  Sampling took {time.time()-t0_sample:.1f}s")
 print(f"Total sampled: {len(sampled_points)} points")
+
+# Log sampling run metadata for reproducibility/auditing
+run_log_row = {
+    'timestamp_utc': datetime.now(timezone.utc).isoformat(),
+    'study_area': __config__.CURRENT_STUDY_AREA,
+    'mask_source': mask_source,
+    'sample_seed': sample_seed,
+    'start_sample_id': start_id,
+    'end_sample_id': end_id,
+    'requested_samples': end_id - start_id + 1,
+    'sampled_points': len(sampled_points),
+}
+run_log_csv = output_dir / 'sampling_runs.csv'
+run_log_df = pd.DataFrame([run_log_row])
+if run_log_csv.exists():
+    existing_runs = pd.read_csv(run_log_csv)
+    run_log_df = pd.concat([existing_runs, run_log_df], ignore_index=True)
+run_log_df.to_csv(run_log_csv, index=False)
+print(f"  ✓ Logged sampling run to {run_log_csv}")
 
 if len(sampled_points) < num_samples:
     print(f"⚠️  Only {len(sampled_points)}/{num_samples} points available")
